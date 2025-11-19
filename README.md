@@ -47,6 +47,3 @@ $z_t$: Transition variable.
 
 Correction from previous versions: This implementation ensures consistency between the initialization phase (Grid Search) and the estimation phase (NLS). Both phases now use the exact same design matrix construction, resolving potential specification biases.
 
-License
-
-MIT
