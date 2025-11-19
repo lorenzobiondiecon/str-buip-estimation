@@ -1,86 +1,105 @@
 import numpy as np
 import pandas as pd
 from src.config import config
-from src.utils import load_panel_data, prepare_regression_matrices
-from src.econometrics import STRModel
+from src.utils import load_panel_data, build_str_data, build_beh_sample
+from src.econometrics import STRModel, BUIPModel
 from src.diagnostics import luukkonen_linearity_test
+from src.data_builder import DataBuilder
 import logging
 
-# Setup Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def main():
     # 1. Load Data
-    logging.info("Loading data...")
-    # Replace with actual filename inside your data folder
-    data_path = config.DATA_DIR / "sample_panel.csv" 
+    data_path = config.DATA_DIR / "df_panel_final.csv"
     
-    # Mock data creation if file doesn't exist (for demonstration)
     if not data_path.exists():
-        logging.warning("Data file not found. Generating synthetic data.")
-        np.random.seed(42)
-        T = 200
-        df = pd.DataFrame({
-            'Date': pd.date_range(start='2000-01-01', periods=T, freq='M'),
-            'Country': ['US'] * T,
-            'dep_var': np.random.randn(T),
-            'indep_var': np.random.randn(T),
-            'z_var': np.random.randn(T)
-        })
-    else:
-        df = load_panel_data(data_path)
+        logging.info("Data file not found. Attempting to download and build from DBnomics...")
+        try:
+            builder = DataBuilder()
+            builder.run()
+        except Exception as e:
+            logging.error(f"Failed to build data: {e}")
+            return
 
-    # 2. Prepare Data (Single Country Example)
-    # In a loop, you would filter by country here
-    matrices = prepare_regression_matrices(
-        df,
-        y_col='dep_var',
-        linear_vars=['indep_var'],
-        nonlinear_vars=['indep_var'], # e.g. variables that switch influence
-        z_col='z_var'
-    )
+    # Load the freshly built data
+    df = load_panel_data(data_path)
+
+    # ==========================================
+    # PART A: STR ESTIMATION
+    # ==========================================
+    logging.info("\n=== Starting STR Estimation Pipeline ===")
     
-    y = matrices['y']
-    X_lin = matrices['X_lin']
-    X_non = matrices['X_non']
-    z = matrices['z']
+    try:
+        # Note: variables in df_panel_final.csv match the build logic: 'r_s', 'q', etc.
+        # We use 'r_s' (returns) as dependent for STR typically, or 'r_q' (excess returns)
+        # Adjust y_col based on your specific model theory. 
+        # Here assuming y = r_s (exchange rate return)
+        
+        # We need to create lags if they aren't in the final CSV (DataBuilder saves raw vars)
+        # Let's ensure lags exist:
+        df['rs_lag1'] = df.groupby('country')['r_s'].shift(1)
+        df['eta_lag1'] = df.groupby('country')['q'].shift(1)
+        
+        # Filter for a specific country for demonstration (e.g., Australia)
+        # The code runs on the whole panel, but STR is usually timeseries specific.
+        country_iso = "Australia"
+        country_df = df[df.country == country_iso].copy()
+        
+        if country_df.empty:
+            logging.warning(f"No data for {country_iso}, skipping STR demo.")
+        else:
+            str_df = build_str_data(country_df, y_col='r_s', z_col='q')
+            
+            # Linearity Test
+            import statsmodels.api as sm
+            X_lin_test = sm.add_constant(str_df[['rs_lag1']].values)
+            lin_test = luukkonen_linearity_test(str_df['y'].values, X_lin_test, str_df['z'].values)
+            logging.info(f"STR Linearity Test p-value ({country_iso}): {lin_test['p_value']:.5f}")
 
-    # 3. Linearity Test
-    logging.info("Running Luukkonen Linearity Test...")
-    # Note: X for test usually combines linear and nonlinear candidates
-    linearity_res = luukkonen_linearity_test(y, X_lin, z)
-    logging.info(f"Linearity Test p-value: {linearity_res['p_value']:.4f}")
+            if lin_test['p_value'] < 0.05:
+                logging.info("Reject Linearity. Fitting STR Model...")
+                str_model = STRModel(str_df, z_col='z')
+                
+                g_grid = np.linspace(0.5, 20, config.GRID_POINTS)
+                z_vals = str_df['z'].values
+                trim = int(len(z_vals) * 0.15)
+                zs = np.sort(z_vals)
+                c_grid = np.linspace(zs[trim], zs[-trim], config.GRID_POINTS)
+                
+                best_init = str_model.grid_search(g_grid, c_grid)
+                res_str = str_model.fit(best_init)
+                print(f"STR Results ({country_iso}):\n{res_str.params}")
+            else:
+                logging.info("STR: Model is Linear.")
 
-    if linearity_res['p_value'] < 0.05:
-        logging.info("Null hypothesis of linearity rejected. Proceeding to STR estimation.")
+    except Exception as e:
+        logging.error(f"STR Pipeline Failed: {e}")
+
+
+    # ==========================================
+    # PART B: BUIP ESTIMATION
+    # ==========================================
+    logging.info("\n=== Starting BUIP Estimation Pipeline ===")
+    
+    try:
+        # DataBuilder output has all cols needed for BUIP: r_s, i_for, i_dom, q, S, s
+        # But we need to make sure we have lags calculated *before* passing to build_beh_sample
+        # actually build_beh_sample calculates the lags internally using .shift().
         
-        # 4. Initialize Model
-        model = STRModel(y, X_lin, X_non, z, transition_type='LSTR')
+        country_iso = "Australia"
+        buip_data_raw = df[df.country == country_iso].copy()
         
-        # 5. Grid Search
-        logging.info("Performing Grid Search...")
-        gamma_grid = np.linspace(0.1, 20, config.GRID_POINTS)
+        buip_df = build_beh_sample(buip_data_raw)
+        buip_model = BUIPModel(buip_df)
         
-        # Trim z for c search (15% to 85% quantiles)
-        z_sorted = np.sort(z)
-        trim_n = int(len(z) * config.TRIM_PERCENT)
-        c_grid = np.linspace(z_sorted[trim_n], z_sorted[-trim_n], config.GRID_POINTS)
+        res_buip = buip_model.fit_multistart(n_starts=10)
         
-        gamma_init, c_init, best_rss = model.grid_search(gamma_grid, c_grid)
-        logging.info(f"Best Grid params: gamma={gamma_init:.2f}, c={c_init:.2f}")
+        print(f"\nBUIP Results ({country_iso}):")
+        print(res_buip.params)
         
-        # 6. NLS Estimation
-        logging.info("Running NLS Estimation...")
-        results = model.fit(init_gamma=gamma_init, init_c=c_init)
-        
-        print("\n--- ESTIMATION RESULTS ---")
-        print(f"Gamma: {results['gamma']:.4f}")
-        print(f"Threshold (c): {results['c']:.4f}")
-        print(f"RSS: {results['rss']:.4f}")
-        print("Coefficients:", results['coefficients'])
-        
-    else:
-        logging.info("Model appears linear. Skipping STR estimation.")
+    except Exception as e:
+        logging.error(f"BUIP Pipeline Failed: {e}")
 
 if __name__ == "__main__":
     main()
