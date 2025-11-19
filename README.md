@@ -16,7 +16,7 @@ Installation
 
 Clone the repository:
 
-git clone [https://github.com/yourusername/str-buip-estimation.git](https://github.com/yourusername/str-buip-estimation.git)
+git clone [https://github.com/lorenzobiondiecon/str-buip-estimation.git](https://github.com/lorenzobiondiecon/str-buip-estimation.git)
 cd str-buip-estimation
 
 
