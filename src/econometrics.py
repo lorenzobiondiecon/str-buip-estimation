@@ -77,21 +77,23 @@ class STRModel:
     def grid_search(self, gamma_grid: np.ndarray, c_grid: np.ndarray) -> Dict[str, float]:
         """
         Grid search for initial parameters using OLS on the linearized design matrix.
+        Uses exponential gamma grid matching legacy implementation.
         """
         best_sse = np.inf
         best_params = {}
 
         for g in gamma_grid:
             for c in c_grid:
-                X, _ = self._design_matrix(g, c)
+                X, _ = self._design_matrix(float(g), float(c))
                 
                 # Fast OLS
                 try:
-                    beta, resid_sum, rank, s = np.linalg.lstsq(X, self.y, rcond=None)
-                    if len(resid_sum) > 0:
-                        sse = resid_sum[0]
+                    beta, residuals, rank, s = np.linalg.lstsq(X, self.y, rcond=None)
+                    if len(residuals) > 0:
+                        sse = residuals[0]
                     else:
-                        sse = np.sum((self.y - X @ beta)**2)
+                        resid = self.y - X @ beta
+                        sse = float(np.dot(resid, resid))
                 except np.linalg.LinAlgError:
                     continue
 
@@ -99,16 +101,16 @@ class STRModel:
                     best_sse = sse
                     # beta order: [const, beta_c, beta_f, const1]
                     best_params = {
+                        "const": float(beta[0]),
+                        "beta_c": float(beta[1]),
+                        "beta_f": float(beta[2]),
                         "gamma": float(g),
                         "c": float(c),
-                        "const": beta[0],
-                        "beta_c": beta[1],
-                        "beta_f": beta[2],
-                        "const1": beta[3],
-                        "sse": sse
+                        "const1": float(beta[3]),
+                        "sse": float(sse)
                     }
         
-        if best_sse == np.inf:
+        if not np.isfinite(best_sse):
              raise RuntimeError(f"STR Grid search failed for {self.z_name}")
              
         return best_params
@@ -127,9 +129,9 @@ class STRModel:
             start_params.get("const1", 0.0)
         ])
         
-        # Bounds: gamma > 0
-        lb = np.array([-np.inf, -np.inf, -np.inf, 1e-4, -np.inf, -np.inf])
-        ub = np.array([ np.inf,  np.inf,  np.inf, np.inf,  np.inf,  np.inf])
+        # Bounds: gamma > 0 (matching legacy 1e-8 lower bound)
+        lb = np.array([-np.inf, -np.inf, -np.inf, 1e-8, -np.inf, -np.inf], dtype=float)
+        ub = np.array([ np.inf,  np.inf,  np.inf, np.inf,  np.inf,  np.inf], dtype=float)
 
         def resid_fun(theta):
             # Unpack
@@ -140,12 +142,15 @@ class STRModel:
             yhat = const + (bc * self.rs) + G * (const1 - (bf * self.eta) - (bc * self.rs))
             return self.y - yhat
 
-        res = least_squares(resid_fun, x0, bounds=(lb, ub), method='trf', loss='linear')
+        res = least_squares(
+            resid_fun, x0, bounds=(lb, ub), method='trf', loss='linear',
+            xtol=1e-8, ftol=1e-8, gtol=1e-8, max_nfev=20000
+        )
 
         # --- Post-Estimation Statistics ---
         theta = res.x
         resid = res.fun
-        sse = np.sum(resid**2)
+        sse = float(2.0 * res.cost)  # Match legacy: 2*cost gives SSE
         dof = max(self.nobs - len(theta), 1)
         
         # Recompute G at optimum for results
@@ -230,95 +235,144 @@ class BUIPModel:
 
     def _compute_residuals_and_cache(self, theta: np.ndarray) -> Tuple[np.ndarray, Dict]:
         """
-        Core logic for BUIP. Calculates utility dynamically.
+        Core logic for BUIP matching legacy implementation exactly.
         theta = [beta_f, beta_c, gamma, c, const, const1]
         """
         beta_f, beta_c, gamma, c, const, const1 = theta
         
         # 1. Expectations (formed at t-1 using information from t-2)
-        # Fundamentalist: Expects reversion to fundamental (s - beta_f * eta)
-        E_s_f = self.s_t2 - beta_f * self.eta_t2
+        # Fundamentalist: Expects mean reversion (s - beta_f * eta)
+        E_s_f_tm1 = self.s_t2 - beta_f * self.eta_t2
         # Chartist: Expects trend continuation (s + beta_c * r)
-        E_s_c = self.s_t2 + beta_c * self.r_t2
+        E_s_c_tm1 = self.s_t2 + beta_c * self.r_t2
         
-        # 2. Expected Change (for sign of profit)
-        E_ds_f = -beta_f * self.eta_t2
-        E_ds_c = beta_c * self.r_t2
+        # 2. Expected directional changes (for profit sign)
+        E_ds_f_tm1 = -beta_f * self.eta_t2
+        E_ds_c_tm1 = beta_c * self.r_t2
         
-        # 3. Profits (psi)
-        # Realized return from carry trade: (r_lag1 + i*_t-1 - i_t-1)
-        # Note: The user snippet uses 'profit_ret' which seems to represent the realized movement + differential
+        # Signs for profit calculation
+        sgn_f = np.sign(E_ds_f_tm1)
+        sgn_c = np.sign(E_ds_c_tm1)
+        
+        # 3. Realized profit/return
         profit_ret = self.r_lag1 + self.i_for_t1 - self.i_dom_t1
         
-        psi_f = profit_ret * np.sign(E_ds_f)
-        psi_c = profit_ret * np.sign(E_ds_c)
+        # 4. Profits weighted by directional correctness
+        psi_f = profit_ret * sgn_f
+        psi_c = profit_ret * sgn_c
         
-        # 4. Risk (sigma squared) - Squared prediction error
-        sig2_f = (E_s_f - self.s_t1)**2
-        sig2_c = (E_s_c - self.s_t1)**2
+        # 5. Risk (squared forecast errors)
+        sig2_f = (E_s_f_tm1 - self.s_t1)**2
+        sig2_c = (E_s_c_tm1 - self.s_t1)**2
         
-        # 5. Utility
+        # 6. Utility = Profit - Risk
         U_f = psi_f - sig2_f
         U_c = psi_c - sig2_c
         d = U_f - U_c
         
-        # 6. Weighting (Omega)
-        # Scale d to make gamma scale-invariant
-        scale_d = np.std(d) if np.std(d) > 1e-12 else 1.0
+        # 7. Mixing weight (Omega) with scale normalization
+        scale_d = max(float(np.std(d, ddof=1)), 1e-12)
         omega = expit((gamma / scale_d) * (d - c))
         
-        # 7. Model Prediction
-        # y = const + beta_c*r + omega*(const1 - beta_f*eta - beta_c*r)
+        # 8. Model prediction matching legacy exactly
+        # yhat = const + beta_c*r + omega*(const1 - beta_f*eta - beta_c*r)
         yhat = const + (beta_c * self.r_lag1) + omega * (const1 - (beta_f * self.eta_lag1) - (beta_c * self.r_lag1))
         
-        return self.y - yhat, {"omega": omega, "U_f": U_f, "U_c": U_c, "yhat": yhat}
+        return self.y - yhat, {"omega": omega, "U_f": U_f, "U_c": U_c, "yhat": yhat, "d": d, "scale_d": scale_d}
 
-    def fit_multistart(self, n_starts: int = 20, hac_lags: int = 4) -> BuipResult:
+    def fit_multistart(self, n_starts: int = None, hac_lags: int = 4) -> BuipResult:
         """
-        Optimization with multiple starting points.
+        Optimization with multiple starting points matching legacy implementation.
+        If n_starts is None, uses grid-based starts like legacy.
         """
-        # Bounds: beta_f, beta_c, gamma > 0 usually expected, but let's keep generic
-        # gamma must be > 0
-        lb = np.array([-np.inf, -np.inf, 1e-4, -np.inf, -np.inf, -np.inf])
-        ub = np.array([ np.inf,  np.inf, np.inf,  np.inf,  np.inf,  np.inf])
+        # Bounds: gamma must be > 0, order: [beta_f, beta_c, gamma, c, const, const1]
+        lb = np.array([-np.inf, -np.inf, 1e-8, -np.inf, -np.inf, -np.inf], dtype=float)
+        ub = np.array([ np.inf,  np.inf, np.inf,  np.inf,  np.inf,  np.inf], dtype=float)
         
         best_sse = np.inf
         best_res = None
         best_cache = None
         
-        # Generate random starts
-        # [beta_f, beta_c, gamma, c, const, const1]
-        np.random.seed(42)
-        starts = []
-        for _ in range(n_starts):
-            s = [
-                np.random.uniform(0, 2),    # beta_f
-                np.random.uniform(0, 2),    # beta_c
-                np.random.uniform(1, 20),   # gamma
-                np.random.uniform(-1, 1),   # c (approx)
-                np.random.normal(0, 0.1),   # const
-                np.random.normal(0, 0.1)    # const1
-            ]
-            starts.append(np.array(s))
+        # Generate starts matching legacy grid approach
+        if n_starts is None:
+            # Grid-based starts like legacy
+            # First compute initial d values to get c_grid
+            bf0, bc0, gm0, c0, const0, const1_0 = 0.2, 1.2, 5.0, 0.0, 0.0, 0.0
+            try:
+                _, cache0 = self._compute_residuals_and_cache(np.array([bf0, bc0, gm0, c0, const0, const1_0]))
+                d_vals = cache0["d"]
+                d_valid = d_vals[np.isfinite(d_vals)]
+                if len(d_valid) > 0:
+                    c_grid = np.array([
+                        float(np.quantile(d_valid, 0.10)),
+                        float(np.quantile(d_valid, 0.30)),
+                        float(np.median(d_valid)),
+                        float(np.quantile(d_valid, 0.70)),
+                        float(np.quantile(d_valid, 0.90)),
+                    ])
+                else:
+                    c_grid = np.array([0.0])
+            except:
+                c_grid = np.array([0.0])
             
-        for x0 in starts:
+            bf_grid = np.array([0.05, 0.10, 0.20, 0.30, 0.40, 0.50])
+            bc_grid = np.array([0.30, 0.50, 0.70, 0.90, 1.20, 1.50])
+            gamma_grid = np.logspace(np.log10(1.0), np.log10(50.0), num=6)
+            const_grid  = np.array([0.0])
+            const1_grid = np.array([0.0])
+            
+            starts = [
+                np.array([bf, bc, gm, c_, cst, cst1], dtype=float)
+                for bf in bf_grid for bc in bc_grid for gm in gamma_grid
+                for c_ in c_grid for cst in const_grid for cst1 in const1_grid
+            ]
+        else:
+            # Random starts
+            np.random.seed(42)
+            starts = []
+            for _ in range(n_starts):
+                s = np.array([
+                    np.random.uniform(0.01, 0.5),    # beta_f
+                    np.random.uniform(0.3, 2.0),     # beta_c
+                    np.random.uniform(1, 50),        # gamma
+                    np.random.uniform(-1, 1),        # c
+                    np.random.normal(0, 0.1),        # const
+                    np.random.normal(0, 0.1)         # const1
+                ], dtype=float)
+                starts.append(s)
+        
+        # Multistart optimization
+        no_improve = 0
+        early_stop_patience = 2000
+        
+        for i, x0 in enumerate(starts):
+            # Clip to bounds
+            x0 = np.minimum(np.maximum(x0, lb + 1e-10), ub - 1e-10)
+            
             try:
                 res = least_squares(
                     lambda theta: self._compute_residuals_and_cache(theta)[0],
-                    x0, bounds=(lb, ub), method='trf'
+                    x0, bounds=(lb, ub), method='trf',
+                    max_nfev=5000, xtol=1e-6, ftol=1e-6, gtol=1e-6
                 )
                 
-                sse = np.sum(res.fun**2)
+                sse = float(2.0 * res.cost)
                 if sse < best_sse:
                     best_sse = sse
                     best_res = res
-                    # Re-run to get cache
                     _, best_cache = self._compute_residuals_and_cache(res.x)
-            except Exception as e:
+                    no_improve = 0
+                else:
+                    no_improve += 1
+            except Exception:
+                no_improve += 1
                 continue
+            
+            if no_improve >= early_stop_patience:
+                break
                 
         if best_res is None:
-            raise RuntimeError("BUIP Multistart Optimization failed.")
+            raise RuntimeError("BUIP Multistart Optimization failed - all attempts unsuccessful.")
             
         # --- Statistics ---
         theta = best_res.x

@@ -18,13 +18,21 @@ def load_panel_data(filepath: str, date_col: str = 'Date', cross_section_col: st
     
     return df
 
-def build_str_data(df: pd.DataFrame, y_col: str, z_col: str) -> pd.DataFrame:
+def build_str_data(df: pd.DataFrame, y_col: str = 'r_s', z_col: str = 'q') -> pd.DataFrame:
     """
     Prepares data specifically for the STR model logic:
     Needs: y, z, rs_lag1, eta_lag1
+    Creates lags if they don't exist.
     """
-    # Assumes the dataframe already has the necessary lags. 
-    # If not, you would create them here.
+    # Create lags if not present
+    if 'rs_lag1' not in df.columns and 'r_s' in df.columns:
+        df = df.copy()
+        df['rs_lag1'] = df['r_s'].shift(1)
+    
+    if 'eta_lag1' not in df.columns and 'q' in df.columns:
+        df = df.copy()
+        df['eta_lag1'] = df['q'].shift(1)
+    
     req_cols = [y_col, z_col, "rs_lag1", "eta_lag1"]
     
     # Check existence
@@ -44,33 +52,33 @@ def build_str_data(df: pd.DataFrame, y_col: str, z_col: str) -> pd.DataFrame:
 def build_beh_sample(df: pd.DataFrame) -> pd.DataFrame:
     """
     Builds the sample for BUIP with specific utility calculation lags.
-    Matches the user logic for 'y' calculation and t-2, t-3 lags.
+    Matches the legacy implementation exactly with S_t1, S_t2, S_t3 construction.
     """
     req_cols = ["r_s", "i_for", "i_dom", "q", "S", "s"]
     for col in req_cols:
         if col not in df.columns:
-            raise KeyError(f"BUIP Missing required column: {col}")
-
+            raise KeyError(f"Missing required column for BUIP: {col}")
+    
     x = pd.DataFrame(index=df.index)
-
-    # 1. Dependent Variable: r_s - (i* - i)
-    x["y"] = df["r_s"] - (df["i_for"] - df["i_dom"])
-
-    # 2. Lags for Utility Calculation (Expectations at t-2, etc)
+    x["y"]        = df["r_s"] - (df["i_for"] - df["i_dom"])
     x["eta_lag1"] = df["q"].shift(1)
     x["r_lag1"]   = df["r_s"].shift(1)
+    x["S_t1"]     = df["S"].shift(1)
+    x["S_t2"]     = df["S"].shift(2)
+    x["S_t3"]     = df["S"].shift(3)
     x["s_t1"]     = df["s"].shift(1)
-    x["s_t2"]     = df["s"].shift(2) # Used for expectations
-    x["eta_t2"]   = df["q"].shift(2)
+    x["s_t2"]     = df["s"].shift(2)
+    x["s_t3"]     = df["s"].shift(3)
     x["r_t2"]     = df["r_s"].shift(2)
-    
-    # 3. Lags for Profit Calculation
+    x["r_t3"]     = df["r_s"].shift(3)
+    x["eta_t2"]   = df["q"].shift(2)
+    x["eta_t3"]   = df["q"].shift(3)
     x["i_dom_t1"] = df["i_dom"].shift(1)
     x["i_for_t1"] = df["i_for"].shift(1)
-
-    # Clean
     x = x.dropna()
-    if x.empty:
-        raise ValueError("BUIP dataset empty after lagging/dropping NaNs.")
-        
+    
+    if len(x) == 0:
+        raise ValueError("After lagging, BUIP sample is empty.")
+    
     return x
+
