@@ -1,6 +1,6 @@
-Python
+# Python
 
-pycache/
+__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -21,17 +21,17 @@ wheels/
 .installed.cfg
 *.egg
 
-Virtual Environment
+# Virtual Environment
 
 venv/
 env/
 ENV/
 
-Jupyter Notebooks
+# Jupyter Notebooks
 
 .ipynb_checkpoints
 
-Data & Results (Optional: Comment these out if you WANT to upload the CSVs)
+# Data & Results (Optional: Comment these out if you WANT to upload the CSVs)
 
 data/
 results/
@@ -39,7 +39,7 @@ results/
 *.pdf
 *.png
 
-OS generated files
+# OS generated files
 
 .DS_Store
 Thumbs.db
