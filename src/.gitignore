@@ -1,0 +1,45 @@
+Python
+
+pycache/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+Virtual Environment
+
+venv/
+env/
+ENV/
+
+Jupyter Notebooks
+
+.ipynb_checkpoints
+
+Data & Results (Optional: Comment these out if you WANT to upload the CSVs)
+
+data/
+results/
+*.csv
+*.pdf
+*.png
+
+OS generated files
+
+.DS_Store
+Thumbs.db
