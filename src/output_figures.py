@@ -440,3 +440,97 @@ def plot_model_comparison(str_results: Dict[str, any],
         plt.close(fig)
     
     return fig
+
+
+def plot_country_detailed_analysis(y: pd.Series, 
+                                   transition_var: pd.Series,
+                                   transition_func: pd.Series,
+                                   c_threshold: float,
+                                   country: str,
+                                   var_name: str,
+                                   model_type: str = 'STR',
+                                   save_path: Optional[Path] = None) -> plt.Figure:
+    """
+    Creates a detailed 3-panel stacked vertical plot for a country showing:
+    - Top: Dependent variable over time
+    - Middle: Transition variable with threshold c (dashed line)
+    - Bottom: Transition function over time
+    
+    Args:
+        y: Dependent variable series (indexed by date)
+        transition_var: Transition variable series (z for STR, utility diff for BUIP)
+        transition_func: Transition function values (G for STR, omega for BUIP)
+        c_threshold: Threshold parameter c
+        country: Country name
+        var_name: Name of transition variable for labeling
+        model_type: 'STR' or 'BUIP'
+        save_path: Optional path to save figure
+    
+    Returns:
+        matplotlib Figure object
+    """
+    # Create figure with 3 subplots, equal height ratios
+    fig, axes = plt.subplots(3, 1, figsize=(12, 6), 
+                            gridspec_kw={'height_ratios': [1, 1, 1]}, dpi=300)
+    fig.patch.set_facecolor('white')
+    
+    # Ensure all series are aligned and have same index
+    common_idx = y.index.intersection(transition_var.index).intersection(transition_func.index)
+    y = y.loc[common_idx]
+    transition_var = transition_var.loc[common_idx]
+    transition_func = transition_func.loc[common_idx]
+    
+    # ==========================================
+    # TOP PANEL: Dependent Variable
+    # ==========================================
+    ax_top = axes[0]
+    ax_top.plot(y.index, y.values, color='black', linewidth=0.7)
+    ax_top.spines['top'].set_visible(True)
+    ax_top.spines['right'].set_visible(True)
+    ax_top.spines['bottom'].set_visible(True)
+    ax_top.spines['left'].set_visible(True)
+    ax_top.set_ylabel('')
+    ax_top.set_xlabel('')
+    ax_top.grid(False)
+    plt.setp(ax_top.xaxis.get_majorticklabels(), rotation=0, ha='center')
+    
+    # ==========================================
+    # MIDDLE PANEL: Transition Variable + Threshold
+    # ==========================================
+    ax_mid = axes[1]
+    ax_mid.plot(transition_var.index, transition_var.values, 
+                color='black', linewidth=0.7)
+    ax_mid.axhline(c_threshold, color='black', linestyle='--', linewidth=0.7)
+    ax_mid.spines['top'].set_visible(True)
+    ax_mid.spines['right'].set_visible(True)
+    ax_mid.spines['bottom'].set_visible(True)
+    ax_mid.spines['left'].set_visible(True)
+    ax_mid.set_ylabel('')
+    ax_mid.set_xlabel('')
+    ax_mid.grid(False)
+    plt.setp(ax_mid.xaxis.get_majorticklabels(), rotation=0, ha='center')
+    
+    # ==========================================
+    # BOTTOM PANEL: Transition Function
+    # ==========================================
+    ax_bot = axes[2]
+    ax_bot.plot(transition_func.index, transition_func.values, 
+                color='black', linewidth=0.7)
+    ax_bot.set_ylim(0.0, 1.0)
+    ax_bot.spines['top'].set_visible(True)
+    ax_bot.spines['right'].set_visible(True)
+    ax_bot.spines['bottom'].set_visible(True)
+    ax_bot.spines['left'].set_visible(True)
+    ax_bot.set_ylabel('')
+    ax_bot.set_xlabel('')
+    ax_bot.grid(False)
+    plt.setp(ax_bot.xaxis.get_majorticklabels(), rotation=0, ha='center')
+    
+    plt.tight_layout()
+    
+    if save_path:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+        plt.close(fig)
+    
+    return fig
