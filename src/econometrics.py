@@ -188,6 +188,164 @@ class STRModel:
 
 
 # ==============================================================================
+# 1b. UNRESTRICTED STR MODEL (NO COEFFICIENT RESTRICTIONS)
+# ==============================================================================
+
+class STRModelNoRestrictions:
+    """
+    Unrestricted STR Model for Exchange Rates.
+    
+    Allows all parameters to vary freely across regimes:
+    y_t = const0 + betac0*r_s,t-1 + betaf0*eta_t-1 + G*(const1 + betac1*r_s,t-1 + betaf1*eta_t-1)
+    
+    Where G is the logistic transition function.
+    """
+    
+    def __init__(self, df: pd.DataFrame, z_col: str):
+        self.y = df["y"].values
+        self.z = df[z_col].values
+        self.rs = df["rs_lag1"].values
+        self.eta = df["eta_lag1"].values
+        self.index = df.index
+        self.z_name = z_col
+        self.nobs = len(self.y)
+        
+        # Robust standard deviation for scaling gamma
+        self.z_std = max(float(np.std(self.z)), 1e-8)
+
+    def _compute_G(self, gamma: float, c: float) -> np.ndarray:
+        return expit((gamma / self.z_std) * (self.z - c))
+
+    def _design_matrix(self, gamma: float, c: float) -> np.ndarray:
+        G = self._compute_G(gamma, c)
+        # Unrestricted design: [const0, betac0, betaf0, const1*G, betac1*G, betaf1*G]
+        X = np.column_stack([
+            np.ones(self.nobs),
+            self.rs,
+            self.eta,
+            G,
+            G * self.rs,
+            G * self.eta
+        ])
+        return X, G
+
+    def grid_search(self, gamma_grid: np.ndarray, c_grid: np.ndarray) -> Dict[str, float]:
+        """
+        Grid search for initial parameters using OLS on the linearized design matrix.
+        """
+        best_sse = np.inf
+        best_params = {}
+
+        for g in gamma_grid:
+            for c in c_grid:
+                X, _ = self._design_matrix(float(g), float(c))
+                
+                # Fast OLS
+                try:
+                    beta, residuals, rank, s = np.linalg.lstsq(X, self.y, rcond=None)
+                    if len(residuals) > 0:
+                        sse = residuals[0]
+                    else:
+                        resid = self.y - X @ beta
+                        sse = float(np.dot(resid, resid))
+                except np.linalg.LinAlgError:
+                    continue
+
+                if sse < best_sse:
+                    best_sse = sse
+                    # beta order: [const0, betac0, betaf0, const1, betac1, betaf1]
+                    best_params = {
+                        "const0": float(beta[0]),
+                        "betac0": float(beta[1]),
+                        "betaf0": float(beta[2]),
+                        "gamma": float(g),
+                        "c": float(c),
+                        "const1": float(beta[3]),
+                        "betac1": float(beta[4]),
+                        "betaf1": float(beta[5]),
+                        "sse": float(sse)
+                    }
+        
+        if not np.isfinite(best_sse):
+             raise RuntimeError(f"STR-Unrestricted Grid search failed for {self.z_name}")
+             
+        return best_params
+
+    def fit(self, start_params: Dict[str, float], hac_lags: int = 4) -> StrResult:
+        """
+        Non-linear Least Squares Estimation.
+        """
+        # Initial vector: [const0, betac0, betaf0, gamma, c, const1, betac1, betaf1]
+        x0 = np.array([
+            start_params.get("const0", 0.0),
+            start_params.get("betac0", 0.0),
+            start_params.get("betaf0", 0.0),
+            max(start_params["gamma"], 0.1),
+            start_params["c"],
+            start_params.get("const1", 0.0),
+            start_params.get("betac1", 0.0),
+            start_params.get("betaf1", 0.0)
+        ])
+        
+        # Bounds: gamma > 0
+        lb = np.array([-np.inf, -np.inf, -np.inf, 1e-8, -np.inf, -np.inf, -np.inf, -np.inf], dtype=float)
+        ub = np.array([ np.inf,  np.inf,  np.inf, np.inf,  np.inf,  np.inf,  np.inf,  np.inf], dtype=float)
+
+        def resid_fun(theta):
+            # Unpack: [const0, betac0, betaf0, gamma, c, const1, betac1, betaf1]
+            const0, betac0, betaf0, g, c_val, const1, betac1, betaf1 = theta
+            G = self._compute_G(g, c_val)
+            
+            # Model: y = const0 + betac0*rs + betaf0*eta + G*(const1 + betac1*rs + betaf1*eta)
+            yhat = const0 + (betac0 * self.rs) + (betaf0 * self.eta) + G * (const1 + (betac1 * self.rs) + (betaf1 * self.eta))
+            return self.y - yhat
+
+        res = least_squares(
+            resid_fun, x0, bounds=(lb, ub), method='trf', loss='linear',
+            xtol=1e-8, ftol=1e-8, gtol=1e-8, max_nfev=20000
+        )
+
+        # --- Post-Estimation Statistics ---
+        theta = res.x
+        resid = res.fun
+        sse = float(2.0 * res.cost)
+        dof = max(self.nobs - len(theta), 1)
+        
+        # Recompute G at optimum for results
+        G_opt = self._compute_G(theta[3], theta[4])
+        yhat = self.y - resid
+
+        # Covariance
+        cov_hac = _newey_west_cov(res.jac, resid, hac_lags)
+        se = np.sqrt(np.diag(cov_hac))
+        
+        tvals = theta / se
+        pvals = 2.0 * (1.0 - stats.t.cdf(np.abs(tvals), dof))
+
+        # Formatting results
+        param_names = ["const0", "betac0", "betaf0", "gamma", "c", "const1", "betac1", "betaf1"]
+        
+        return StrResult(
+            params=pd.Series(theta, index=param_names),
+            se=pd.Series(se, index=param_names),
+            tvals=pd.Series(tvals, index=param_names),
+            pvals=pd.Series(pvals, index=param_names),
+            sse=sse,
+            rmse=np.sqrt(sse / self.nobs),
+            aic=self.nobs * np.log(sse / self.nobs) + 2 * len(theta),
+            bic=self.nobs * np.log(sse / self.nobs) + np.log(self.nobs) * len(theta),
+            nobs=self.nobs,
+            dof=dof,
+            success=res.success,
+            message=res.message,
+            G=pd.Series(G_opt, index=self.index, name="G"),
+            y_fit=pd.Series(yhat, index=self.index, name="y_hat"),
+            resid=pd.Series(resid, index=self.index, name="resid"),
+            cov_hac=cov_hac
+        )
+
+
+# ==============================================================================
 # 2. BEHAVIORAL UIP (BUIP) MODEL
 # ==============================================================================
 
