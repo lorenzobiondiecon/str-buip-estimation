@@ -109,6 +109,8 @@ After running the notebook, you'll find:
 - `transition_variable_selection.csv/.tex`: Selected transition variables and LM test p-values
 - `str_results_table.csv/.tex`: STR parameter estimates
 - `buip_results_table.csv/.tex`: BUIP parameter estimates
+- `str_diagnostics_table.csv/.tex`: STR residual diagnostic tests (Ljung-Box, ARCH, Jarque-Bera)
+- `buip_diagnostics_table.csv/.tex`: BUIP residual diagnostic tests (Ljung-Box, ARCH, Jarque-Bera)
 
 **Aggregate Figures** (in `results/figures/aggregate/`):
 - `str_regime_distribution.pdf/.png`: STR regime distribution

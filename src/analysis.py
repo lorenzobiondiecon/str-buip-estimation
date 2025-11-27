@@ -43,6 +43,7 @@ def build_z_candidates(data: pd.DataFrame) -> Dict[str, pd.Series]:
         "ppp_abs": np.abs(data["f_ppp"]),
         "drf_abs": np.abs(data["f_ppp_rel"]),
         "rel_misalignment_abs": np.abs(data["f_ppp_rel"] - data["r_s"]),
+        "excess_returns": data["r_s"] - (data["i_for"] - data["i_dom"])
     }
     
     candidates = {}
