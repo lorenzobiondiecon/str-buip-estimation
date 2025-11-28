@@ -2,10 +2,69 @@ import pandas as pd
 import numpy as np
 from dbnomics import fetch_series
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from .config import config
 
 logger = logging.getLogger(__name__)
+
+
+def find_max_complete_period(
+    df_wide: pd.DataFrame,
+    country: str,
+    start_constraint: Optional[pd.Timestamp] = None,
+    end_constraint: Optional[pd.Timestamp] = None
+) -> Tuple[Optional[pd.Timestamp], Optional[pd.Timestamp]]:
+    """Find the maximum continuous period with all three variables for a country.
+    
+    Args:
+        df_wide: Wide-format dataframe with columns: country, date, exchange_rate, cpi, policy_rate
+        country: Country name to filter for
+        start_constraint: Optional earliest allowed start date
+        end_constraint: Optional latest allowed end date
+        
+    Returns:
+        Tuple of (start_date, end_date) for the longest continuous complete period,
+        or (None, None) if no complete data exists.
+    """
+    # Filter for this country
+    country_data = df_wide[df_wide['country'] == country].copy().sort_values('date')
+    
+    # Apply date constraints if provided
+    if start_constraint is not None:
+        country_data = country_data[country_data['date'] >= start_constraint]
+    if end_constraint is not None:
+        country_data = country_data[country_data['date'] <= end_constraint]
+    
+    if len(country_data) == 0:
+        return None, None
+    
+    # Identify rows with all three variables present
+    country_data['complete'] = (
+        country_data['exchange_rate'].notna() & 
+        country_data['cpi'].notna() & 
+        country_data['policy_rate'].notna()
+    )
+    
+    # Create groups of consecutive complete observations
+    country_data['group'] = (country_data['complete'] != country_data['complete'].shift()).cumsum()
+    
+    # Filter to only complete rows
+    complete_rows = country_data[country_data['complete']].copy()
+    
+    if len(complete_rows) == 0:
+        return None, None
+    
+    # Find the group with the most observations
+    group_sizes = complete_rows.groupby('group').size()
+    max_group = group_sizes.idxmax()
+    
+    # Get the date range for this group
+    max_period = complete_rows[complete_rows['group'] == max_group]
+    start_date = max_period['date'].min()
+    end_date = max_period['date'].max()
+    
+    return start_date, end_date
+
 
 class DataBuilder:
     """
@@ -42,8 +101,15 @@ class DataBuilder:
         self.all_countries = {**self.MP_COUNTRIES, **self.MM_COUNTRIES, **self.OTHER_COUNTRIES}
         self.raw_dfs: List[pd.DataFrame] = []
 
-    def run(self) -> pd.DataFrame:
-        """Main execution method."""
+    def run(self, build_mode: str = "restricted") -> pd.DataFrame:
+        """Main execution method.
+        
+        Args:
+            build_mode: 'restricted' (default) limits sample to 2000-01..2024-12.
+                        'max' builds a maximum-length dataset per country where
+                        exchange rate, CPI and policy rate are jointly available,
+                        with country-specific trims for known gaps.
+        """
         logger.info("Starting Data Build Process...")
         
         self.fetch_imf_data()
@@ -58,15 +124,25 @@ class DataBuilder:
         df_all = pd.concat(self.raw_dfs, ignore_index=True)
         df_all["date"] = pd.to_datetime(df_all["period"]).dt.to_period("M").dt.to_timestamp("M")
         
+        # Drop potential duplicates (e.g., from interpolations for AU/NZ)
+        before = len(df_all)
+        df_all = df_all.drop_duplicates(subset=["country", "variable", "date"], keep="last")
+        after = len(df_all)
+        if after < before:
+            logger.info(f"Dropped {before - after} duplicate (country,variable,date) rows")
+        
         # Advanced Processing
         df_all = self.process_indonesia(df_all)
         df_all = self.process_oecd_replacements(df_all)
         
         # Feature Engineering
-        final_df = self.engineer_features(df_all)
+        final_df = self.engineer_features(df_all, mode=build_mode)
         
         # Save
-        output_path = config.DATA_DIR / "df_panel_final.csv"
+        if build_mode == "max":
+            output_path = config.DATA_DIR / "df_panel_max.csv"
+        else:
+            output_path = config.DATA_DIR / "df_panel_final.csv"
         final_df.to_csv(output_path, index=False)
         logger.info(f"Dataset saved to {output_path}")
         return final_df
@@ -223,12 +299,20 @@ class DataBuilder:
             
         return df_all
 
-    def engineer_features(self, df_all: pd.DataFrame) -> pd.DataFrame:
-        """Pivots data and calculates derived econometric variables."""
-        logger.info("Engineering Features...")
+    def engineer_features(self, df_all: pd.DataFrame, mode: str = "restricted") -> pd.DataFrame:
+        """Pivots data and calculates derived econometric variables.
         
-        # 1. Filter Date Range
-        df_sample = df_all[(df_all["date"] >= "2000-01-01") & (df_all["date"] <= "2024-12-31")].copy()
+        If mode == 'restricted', filter to 2000-01..2024-12 (legacy behavior).
+        If mode == 'max', do not hard-cut dates; instead, later trim per-country
+        based on availability and known gap rules.
+        """
+        logger.info(f"Engineering Features (mode={mode})...")
+        
+        # 1. Filter Date Range (restricted mode)
+        if mode == "restricted":
+            df_sample = df_all[(df_all["date"] >= "2000-01-01") & (df_all["date"] <= "2024-12-31")].copy()
+        else:
+            df_sample = df_all.copy()
         
         # 2. Pivot
         df_wide = df_sample.pivot_table(
@@ -236,6 +320,13 @@ class DataBuilder:
             columns='variable',
             values='value'
         ).reset_index()
+
+        # 2b. Build US benchmark BEFORE any country-specific filtering that may drop US rows
+        us_source = df_wide[df_wide.country == 'United States'][["date", "cpi", "policy_rate"]] \
+            .rename(columns={"cpi": "CPI_for", "policy_rate": "i_for"})
+        # Ensure continuous monthly coverage for US: sort and forward-fill gaps
+        us_source = us_source.sort_values("date").drop_duplicates(subset=["date"], keep="last")
+        us_source[["CPI_for", "i_for"]] = us_source[["CPI_for", "i_for"]].ffill()
         
         # 3. Patch Philippines missing datum (Specific fix)
         date0 = pd.Timestamp('2022-01-31')
@@ -247,20 +338,79 @@ class DataBuilder:
             if len(lower) > 0 and len(upper) > 0:
                 df_wide.loc[mask_ph, 'policy_rate'] = (lower[0] + upper[0]) / 2.0
 
-        # 4. Merge US Data (Benchmark)
-        us_ref = df_wide[df_wide.country == 'United States'][["date", "cpi", "policy_rate"]] \
-            .rename(columns={"cpi": "CPI_for", "policy_rate": "i_for"})
+        # 4. In 'max' mode, find maximum continuous complete period per country
+        if mode == "max":
+            logger.info("Finding maximum complete period for each country...")
+            # Ensure date is Timestamp month-end
+            df_wide['date'] = pd.to_datetime(df_wide['date'])
+            
+            # Define date constraints for specific countries with known gaps
+            date_constraints = {
+                'Indonesia': {'start': pd.Timestamp('1984-09-30'), 'end': None},
+                'Korea': {'start': pd.Timestamp('1976-08-31'), 'end': None},
+                'Philippines': {'start': None, 'end': pd.Timestamp('2021-12-31')}
+            }
+            
+            # Find maximum complete periods for each country (excluding US)
+            country_periods = {}
+            non_us_countries = [c for c in df_wide['country'].unique() if c != 'United States']
+            
+            for country in non_us_countries:
+                constraints = date_constraints.get(country, {'start': None, 'end': None})
+                start_date, end_date = find_max_complete_period(
+                    df_wide,
+                    country,
+                    start_constraint=constraints.get('start'),
+                    end_constraint=constraints.get('end')
+                )
+                if start_date and end_date:
+                    country_periods[country] = {'start': start_date, 'end': end_date}
+                    logger.info(f"  {country}: {start_date.strftime('%Y-%m')} to {end_date.strftime('%Y-%m')}")
+                else:
+                    logger.warning(f"  {country}: No complete data period found")
+            
+            # Filter df_wide to keep only the complete periods per country (and keep all US data)
+            filtered_rows = []
+            
+            # Keep US data for benchmark
+            us_data = df_wide[df_wide['country'] == 'United States']
+            filtered_rows.append(us_data)
+            
+            # Filter each country to its maximum complete period
+            for country, period in country_periods.items():
+                country_mask = (
+                    (df_wide['country'] == country) &
+                    (df_wide['date'] >= period['start']) &
+                    (df_wide['date'] <= period['end'])
+                )
+                filtered_rows.append(df_wide[country_mask])
+            
+            before_rows = len(df_wide)
+            df_wide = pd.concat(filtered_rows, ignore_index=True)
+            df_wide = df_wide.sort_values(['country', 'date']).reset_index(drop=True)
+            logger.info(f"Max mode: kept {len(df_wide)} / {before_rows} rows after period filtering")
+        
+        # 5. Merge US Data (Benchmark)
+        # Use the previously built US source to avoid accidental drops
+        us_ref = us_source.copy()
             
         df_final = df_wide[df_wide.country != 'United States'].merge(us_ref, on="date", how="left")
+        # After merge, forward-fill any remaining US gaps by date
+        df_final = df_final.sort_values(["country", "date"]).groupby("country", as_index=False).apply(
+            lambda g: g.assign(
+                CPI_for=g["CPI_for"].ffill(),
+                i_for=g["i_for"].ffill()
+            )
+        ).reset_index(drop=True)
         
-        # 5. Rename
+        # 6. Rename
         df_final = df_final.rename(columns={
             "exchange_rate": "S",
             "cpi": "CPI_dom",
             "policy_rate": "i_dom",
         })
         
-        # 6. Derived Variables
+        # 7. Derived Variables
         # Original code (demeaned by country):
         df_final["s"] = np.log(df_final["S"]) - df_final.groupby("country")["S"].transform(lambda x: np.log(x).mean())
         df_final["p_dom"] = np.log(df_final["CPI_dom"]) - df_final.groupby("country")["CPI_dom"].transform(lambda x: np.log(x).mean())
@@ -297,4 +447,29 @@ class DataBuilder:
             "i_dom", "i_for", "i_diff", "f_ppp", "f_ppp_rel", "r_q"
         ]
         
-        return df_final[keep_cols].sort_values(["country", "date"]).dropna()
+        # Drop duplicates in final set just in case
+        df_out = df_final[keep_cols].drop_duplicates(subset=["country", "date"], keep="last")
+        df_out = df_out.sort_values(["country", "date"]).reset_index(drop=True)
+
+        # In max mode or general case, avoid over-aggressive dropna: require essential columns
+        essential = ["S", "CPI_dom", "CPI_for", "i_dom", "i_for"]
+        missing_essential = df_out[essential].isna().all(axis=None)
+        df_out = df_out[df_out[essential].notna().all(axis=1)]
+
+        # Some derived columns may still have NaNs in first rows due to differencing; trim leading NaNs when necessary
+        def trim_leading_nans(group: pd.DataFrame) -> pd.DataFrame:
+            idx = group.index
+            # Find first index where r_s and q are not NaN
+            valid = group["r_s"].notna() & group["q"].notna()
+            if not valid.any():
+                return group.iloc[0:0]
+            first = valid.idxmax()
+            return group.loc[first:]
+
+        df_out = df_out.groupby("country", as_index=False).apply(trim_leading_nans).reset_index(drop=True)
+
+        # Final safety: do not return an empty dataset silently
+        if df_out.empty:
+            logger.error("Engineer features produced an empty dataset. Likely missing US benchmarks or key series after merges.")
+            raise ValueError("Engineered dataset is empty. Check DBnomics availability for US CPI/policy rate and country series.")
+        return df_out

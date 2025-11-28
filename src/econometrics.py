@@ -344,6 +344,159 @@ class STRModelNoRestrictions:
             cov_hac=cov_hac
         )
 
+# ============================================================================
+# 1c. UNRESTRICTED LSTR2 MODEL (TWO THRESHOLDS)
+# ============================================================================
+
+class STRModelNoRestrictionsLSTR2:
+    """
+    Unrestricted LSTR2 Model for Exchange Rates.
+
+    Allows all parameters to vary freely across regimes with LSTR2 transition:
+    G = expit((gamma/z_std) * (z - c1) * (z - c2))
+
+    Model:
+      y_t = const0 + betac0*r_s,t-1 + betaf0*eta,t-1
+            + G*(const1 + betac1*r_s,t-1 + betaf1*eta,t-1)
+    """
+
+    def __init__(self, df: pd.DataFrame, z_col: str):
+        self.y = df["y"].values
+        self.z = df[z_col].values
+        self.rs = df["rs_lag1"].values
+        self.eta = df["eta_lag1"].values
+        self.index = df.index
+        self.z_name = z_col
+        self.nobs = len(self.y)
+
+        # Robust standard deviation for scaling gamma
+        self.z_std = max(float(np.std(self.z)), 1e-8)
+
+    def _compute_G(self, gamma: float, c1: float, c2: float) -> np.ndarray:
+        return expit((gamma / self.z_std) * (self.z - c1) * (self.z - c2))
+
+    def _design_matrix(self, gamma: float, c1: float, c2: float) -> np.ndarray:
+        G = self._compute_G(gamma, c1, c2)
+        # Unrestricted design: [const0, betac0, betaf0, const1*G, betac1*G, betaf1*G]
+        X = np.column_stack([
+            np.ones(self.nobs),
+            self.rs,
+            self.eta,
+            G,
+            G * self.rs,
+            G * self.eta
+        ])
+        return X, G
+
+    def grid_search(self, gamma_grid: np.ndarray, c_grid: np.ndarray) -> Dict[str, float]:
+        """
+        Grid search for initial parameters using OLS on the linearized design matrix.
+        Searches gamma in gamma_grid and (c1,c2) over all ordered pairs from c_grid with c1 < c2.
+        """
+        best_sse = np.inf
+        best_params: Dict[str, float] = {}
+
+        for g in gamma_grid:
+            for i, c1 in enumerate(c_grid):
+                for c2 in c_grid[i+1:]:  # ensure c1 < c2
+                    X, _ = self._design_matrix(float(g), float(c1), float(c2))
+                    try:
+                        beta, residuals, rank, s = np.linalg.lstsq(X, self.y, rcond=None)
+                        if len(residuals) > 0:
+                            sse = residuals[0]
+                        else:
+                            resid = self.y - X @ beta
+                            sse = float(np.dot(resid, resid))
+                    except np.linalg.LinAlgError:
+                        continue
+
+                    if sse < best_sse:
+                        best_sse = sse
+                        best_params = {
+                            "const0": float(beta[0]),
+                            "betac0": float(beta[1]),
+                            "betaf0": float(beta[2]),
+                            "gamma": float(g),
+                            "c1": float(c1),
+                            "c2": float(c2),
+                            "const1": float(beta[3]),
+                            "betac1": float(beta[4]),
+                            "betaf1": float(beta[5]),
+                            "sse": float(sse)
+                        }
+
+        if not np.isfinite(best_sse):
+            raise RuntimeError(f"STR-Unrestricted LSTR2 Grid search failed for {self.z_name}")
+
+        return best_params
+
+    def fit(self, start_params: Dict[str, float], hac_lags: int = 4) -> StrResult:
+        """Non-linear Least Squares Estimation for LSTR2."""
+        # Initial vector: [const0, betac0, betaf0, gamma, c1, c2, const1, betac1, betaf1]
+        x0 = np.array([
+            start_params.get("const0", 0.0),
+            start_params.get("betac0", 0.0),
+            start_params.get("betaf0", 0.0),
+            max(start_params["gamma"], 0.1),
+            start_params["c1"],
+            start_params["c2"],
+            start_params.get("const1", 0.0),
+            start_params.get("betac1", 0.0),
+            start_params.get("betaf1", 0.0)
+        ])
+
+        # Bounds: gamma > 0; c1, c2 unbounded
+        lb = np.array([-np.inf, -np.inf, -np.inf, 1e-8, -np.inf, -np.inf, -np.inf, -np.inf, -np.inf], dtype=float)
+        ub = np.array([ np.inf,  np.inf,  np.inf, np.inf,  np.inf,  np.inf,  np.inf,  np.inf,  np.inf], dtype=float)
+
+        def resid_fun(theta):
+            # Unpack: [const0, betac0, betaf0, gamma, c1, c2, const1, betac1, betaf1]
+            const0, betac0, betaf0, g, c1_val, c2_val, const1, betac1, betaf1 = theta
+            G = self._compute_G(g, c1_val, c2_val)
+            yhat = const0 + (betac0 * self.rs) + (betaf0 * self.eta) + G * (const1 + (betac1 * self.rs) + (betaf1 * self.eta))
+            return self.y - yhat
+
+        res = least_squares(
+            resid_fun, x0, bounds=(lb, ub), method='trf', loss='linear',
+            xtol=1e-8, ftol=1e-8, gtol=1e-8, max_nfev=20000
+        )
+
+        theta = res.x
+        resid = res.fun
+        sse = float(2.0 * res.cost)
+        dof = max(self.nobs - len(theta), 1)
+
+        # Recompute G and yhat at optimum
+        G_opt = self._compute_G(theta[3], theta[4], theta[5])
+        yhat = self.y - resid
+
+        # HAC covariance
+        cov_hac = _newey_west_cov(res.jac, resid, hac_lags)
+        se = np.sqrt(np.diag(cov_hac))
+        tvals = theta / se
+        pvals = 2.0 * (1.0 - stats.t.cdf(np.abs(tvals), dof))
+
+        param_names = ["const0", "betac0", "betaf0", "gamma", "c1", "c2", "const1", "betac1", "betaf1"]
+
+        return StrResult(
+            params=pd.Series(theta, index=param_names),
+            se=pd.Series(se, index=param_names),
+            tvals=pd.Series(tvals, index=param_names),
+            pvals=pd.Series(pvals, index=param_names),
+            sse=sse,
+            rmse=np.sqrt(sse / self.nobs),
+            aic=self.nobs * np.log(sse / self.nobs) + 2 * len(theta),
+            bic=self.nobs * np.log(sse / self.nobs) + np.log(self.nobs) * len(theta),
+            nobs=self.nobs,
+            dof=dof,
+            success=res.success,
+            message=res.message,
+            G=pd.Series(G_opt, index=self.index, name="G"),
+            y_fit=pd.Series(yhat, index=self.index, name="y_hat"),
+            resid=pd.Series(resid, index=self.index, name="resid"),
+            cov_hac=cov_hac
+        )
+
 
 # ==============================================================================
 # 2. BEHAVIORAL UIP (BUIP) MODEL
@@ -592,3 +745,44 @@ def _newey_west_cov(J: np.ndarray, resid: np.ndarray, maxlags: int = 4) -> np.nd
         
     # Cov = 1/n * H^-1 * Omega * H^-1
     return (1.0 / n) * (H_inv @ Omega @ H_inv)
+
+# ==============================================================================
+# 4. LINEAR ARX BENCHMARK (FOR COMPARISON)
+# ==============================================================================
+
+def run_linear_arx_benchmark(data: pd.DataFrame) -> dict:
+    """Estimate a linear ARX benchmark: y ~ const + rs_lag1 + (-eta_lag1).
+
+    Returns parameter table and fit metrics including RMSE, AIC, BIC, pseudo-R2.
+    """
+    import statsmodels.api as sm
+
+    df_lin = pd.DataFrame({
+        "y": data["r_s"] - (data["i_for"] - data["i_dom"]),
+        "rs_lag1": data["r_s"].shift(1),
+        "eta_lag1": data["q"].shift(1)
+    }).dropna()
+    df_lin["neg_eta_lag1"] = -df_lin["eta_lag1"]
+    y = df_lin["y"].to_numpy()
+    X = sm.add_constant(df_lin[["rs_lag1","neg_eta_lag1"]])
+    olin = sm.OLS(y, X).fit()
+    olin_hac = sm.OLS(y, X).fit(cov_type="HAC", cov_kwds={"maxlags": 6})
+
+    SSR = float(np.sum(olin.resid**2))
+    TSS = float(np.sum(y**2))
+    n, k = X.shape
+    rmse = np.sqrt(SSR / n)
+    aic = n * np.log(SSR / n) + 2 * k
+    bic = n * np.log(SSR / n) + np.log(n) * k
+    pseudo_r2 = 1.0 - SSR / TSS if TSS > 0 else np.nan
+
+    arx_tbl = pd.DataFrame({
+        "Parameter": ["mu(const)", "phi(rs_lag1)", "theta(eta_lag1)"],
+        "Estimate_IID": [olin.params["const"], olin.params["rs_lag1"], olin.params["neg_eta_lag1"]],
+        "SE_IID":       [olin.bse["const"],    olin.bse["rs_lag1"],    olin.bse["neg_eta_lag1"]],
+        "t_IID":        [olin.tvalues["const"],olin.tvalues["rs_lag1"],olin.tvalues["neg_eta_lag1"]],
+        "p_IID":        [olin.pvalues["const"],olin.pvalues["rs_lag1"],olin.pvalues["neg_eta_lag1"]],
+        "SE_HAC(L=6)":  [olin_hac.bse["const"],olin_hac.bse["rs_lag1"],olin_hac.bse["neg_eta_lag1"]],
+    })
+    fit_tbl = pd.DataFrame([{"RMSE": rmse, "AIC": aic, "BIC": bic, "pseudo_R2": pseudo_r2, "nobs": n}])
+    return {"params": arx_tbl, "fit": fit_tbl}
