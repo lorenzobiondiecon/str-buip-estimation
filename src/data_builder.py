@@ -412,14 +412,16 @@ class DataBuilder:
         
         # 7. Derived Variables
         # Original code (demeaned by country):
-        df_final["s"] = np.log(df_final["S"]) - df_final.groupby("country")["S"].transform(lambda x: np.log(x).mean())
-        df_final["p_dom"] = np.log(df_final["CPI_dom"]) - df_final.groupby("country")["CPI_dom"].transform(lambda x: np.log(x).mean())
-        df_final["p_for"] = np.log(df_final["CPI_for"]) - df_final.groupby("country")["CPI_for"].transform(lambda x: np.log(x).mean())
+
+        # df_final["s"] = np.log(df_final["S"]) - df_final.groupby("country")["S"].transform(lambda x: np.log(x).mean())
+        # df_final["p_dom"] = np.log(df_final["CPI_dom"]) - df_final.groupby("country")["CPI_dom"].transform(lambda x: np.log(x).mean())
+        # df_final["p_for"] = np.log(df_final["CPI_for"]) - df_final.groupby("country")["CPI_for"].transform(lambda x: np.log(x).mean())
         
         # New code (not demeaned):
-        # df_final["s"] = np.log(df_final["S"])
-        # df_final["p_dom"] = np.log(df_final["CPI_dom"])
-        # df_final["p_for"] = np.log(df_final["CPI_for"])
+        
+        df_final["s"] = np.log(df_final["S"])
+        df_final["p_dom"] = np.log(df_final["CPI_dom"])
+        df_final["p_for"] = np.log(df_final["CPI_for"])
         
 
         # Changes

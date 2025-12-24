@@ -37,10 +37,10 @@ class STRModel:
     Specific STR Model for Exchange Rates.
     
     Regime 0 (G=0): y_t = alpha + beta_c * r_s,t-1
-    Regime 1 (G=1): y_t = (alpha + alpha1) - beta_f * eta_t-1
-    
-    Mixing Equation:
-    y_t = alpha + beta_c * r_s + G * (alpha1 - beta_f * eta - beta_c * r_s)
+    Regime 1 (G=1): y_t = (alpha + alpha1) + beta_f * eta_t-1
+
+    Mixing Equation (eta enters with a positive sign so mean reversion implies beta_f < 0):
+    y_t = alpha + beta_c * r_s + G * (alpha1 + beta_f * eta - beta_c * r_s)
     """
     
     def __init__(self, df: pd.DataFrame, z_col: str):
@@ -61,15 +61,14 @@ class STRModel:
     def _design_matrix(self, gamma: float, c: float) -> np.ndarray:
         G = self._compute_G(gamma, c)
         # Columns corresponding to: [const, beta_c, beta_f, const1]
-        # Derived from: alpha + beta_c*rs + G*alpha1 - G*beta_f*eta - G*beta_c*rs
-        # Rearranged: alpha*1 + beta_c*(1-G)*rs + beta_f*(G*-eta) + alpha1*G
-        
-        # Note: Your snippet used specific column ordering:
-        # X = [1, (1-G)*rs, G*(-eta), G] -> [const, beta_c, beta_f, const1]
+        # Derived from: alpha + beta_c*rs + G*alpha1 + G*beta_f*eta - G*beta_c*rs
+        # Rearranged: alpha*1 + beta_c*(1-G)*rs + beta_f*(G*eta) + alpha1*G
+
+        # Note: Order kept as X = [1, (1-G)*rs, G*(eta), G] -> [const, beta_c, beta_f, const1]
         X = np.column_stack([
             np.ones(self.nobs),
             (1 - G) * self.rs,
-            G * (-self.eta),
+            G * (self.eta),
             G
         ])
         return X, G
@@ -138,8 +137,8 @@ class STRModel:
             const, bc, bf, g, c_val, const1 = theta
             G = self._compute_G(g, c_val)
             
-            # Model: y = const + bc*rs + G*(const1 - bf*eta - bc*rs)
-            yhat = const + (bc * self.rs) + G * (const1 - (bf * self.eta) - (bc * self.rs))
+            # Model: y = const + bc*rs + G*(const1 + bf*eta - bc*rs)
+            yhat = const + (bc * self.rs) + G * (const1 + (bf * self.eta) - (bc * self.rs))
             return self.y - yhat
 
         res = least_squares(
@@ -552,13 +551,14 @@ class BUIPModel:
         beta_f, beta_c, gamma, c, const, const1 = theta
         
         # 1. Expectations (formed at t-1 using information from t-2)
-        # Fundamentalist: Expects mean reversion (s - beta_f * eta)
-        E_s_f_tm1 = self.s_t2 - beta_f * self.eta_t2
+        # Fundamentalist: Expects mean reversion; beta_f < 0 implies reversion
+        # s_hat = s_{t-2} + beta_f * eta_{t-2}
+        E_s_f_tm1 = self.s_t2 + beta_f * self.eta_t2
         # Chartist: Expects trend continuation (s + beta_c * r)
         E_s_c_tm1 = self.s_t2 + beta_c * self.r_t2
-        
+
         # 2. Expected directional changes (for profit sign)
-        E_ds_f_tm1 = -beta_f * self.eta_t2
+        E_ds_f_tm1 = beta_f * self.eta_t2
         E_ds_c_tm1 = beta_c * self.r_t2
         
         # Signs for profit calculation
@@ -585,9 +585,9 @@ class BUIPModel:
         scale_d = max(float(np.std(d, ddof=1)), 1e-12)
         omega = expit((gamma / scale_d) * (d - c))
         
-        # 8. Model prediction matching legacy exactly
-        # yhat = const + beta_c*r + omega*(const1 - beta_f*eta - beta_c*r)
-        yhat = const + (beta_c * self.r_lag1) + omega * (const1 - (beta_f * self.eta_lag1) - (beta_c * self.r_lag1))
+        # 8. Model prediction (eta enters positively; beta_f < 0 implies mean reversion)
+        # yhat = const + beta_c*r + omega*(const1 + beta_f*eta - beta_c*r)
+        yhat = const + (beta_c * self.r_lag1) + omega * (const1 + (beta_f * self.eta_lag1) - (beta_c * self.r_lag1))
         
         return self.y - yhat, {"omega": omega, "U_f": U_f, "U_c": U_c, "yhat": yhat, "d": d, "scale_d": scale_d}
 
@@ -762,9 +762,8 @@ def run_linear_arx_benchmark(data: pd.DataFrame) -> dict:
         "rs_lag1": data["r_s"].shift(1),
         "eta_lag1": data["q"].shift(1)
     }).dropna()
-    df_lin["neg_eta_lag1"] = -df_lin["eta_lag1"]
     y = df_lin["y"].to_numpy()
-    X = sm.add_constant(df_lin[["rs_lag1","neg_eta_lag1"]])
+    X = sm.add_constant(df_lin[["rs_lag1","eta_lag1"]])
     olin = sm.OLS(y, X).fit()
     olin_hac = sm.OLS(y, X).fit(cov_type="HAC", cov_kwds={"maxlags": 6})
 
@@ -778,11 +777,11 @@ def run_linear_arx_benchmark(data: pd.DataFrame) -> dict:
 
     arx_tbl = pd.DataFrame({
         "Parameter": ["mu(const)", "phi(rs_lag1)", "theta(eta_lag1)"],
-        "Estimate_IID": [olin.params["const"], olin.params["rs_lag1"], olin.params["neg_eta_lag1"]],
-        "SE_IID":       [olin.bse["const"],    olin.bse["rs_lag1"],    olin.bse["neg_eta_lag1"]],
-        "t_IID":        [olin.tvalues["const"],olin.tvalues["rs_lag1"],olin.tvalues["neg_eta_lag1"]],
-        "p_IID":        [olin.pvalues["const"],olin.pvalues["rs_lag1"],olin.pvalues["neg_eta_lag1"]],
-        "SE_HAC(L=6)":  [olin_hac.bse["const"],olin_hac.bse["rs_lag1"],olin_hac.bse["neg_eta_lag1"]],
+        "Estimate_IID": [olin.params["const"], olin.params["rs_lag1"], olin.params["eta_lag1"]],
+        "SE_IID":       [olin.bse["const"],    olin.bse["rs_lag1"],    olin.bse["eta_lag1"]],
+        "t_IID":        [olin.tvalues["const"],olin.tvalues["rs_lag1"],olin.tvalues["eta_lag1"]],
+        "p_IID":        [olin.pvalues["const"],olin.pvalues["rs_lag1"],olin.pvalues["eta_lag1"]],
+        "SE_HAC(L=6)":  [olin_hac.bse["const"],olin_hac.bse["rs_lag1"],olin_hac.bse["eta_lag1"]],
     })
     fit_tbl = pd.DataFrame([{"RMSE": rmse, "AIC": aic, "BIC": bic, "pseudo_R2": pseudo_r2, "nobs": n}])
     return {"params": arx_tbl, "fit": fit_tbl}
