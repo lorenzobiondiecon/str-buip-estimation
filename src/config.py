@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from dataclasses import dataclass
+from typing import Dict
 
 @dataclass
 class Config:
@@ -29,3 +30,39 @@ class Config:
     SAVE_LATEX = True
 
 config = Config()
+
+# Country mappings (name -> ISO code)
+COUNTRIES: Dict[str, str] = {
+    "Australia": "AUS",
+    "Brazil": "BRA",
+    "Canada": "CAN",
+    "Euro Area": "EA",
+    "Indonesia": "IND",
+    "Japan": "JPN",
+    "Korea": "KOR",
+    "Mexico": "MEX",
+    "New Zealand": "NZL",
+    "Philippines": "PHL",
+    "Switzerland": "CHE",
+    "Thailand": "THA",
+    "Türkiye": "TUR",
+    "United Kingdom": "GBR"
+}
+
+# Data sources by country
+DATA_SOURCES: Dict[str, str] = {
+    'Australia': 'IMF/IFS (S, CPI interp., i)',
+    'Brazil': 'IMF/IFS (S, CPI, MM rate)',
+    'Canada': 'IMF/IFS (S, CPI), OECD (i)',
+    'Euro Area': 'IMF/IFS (S, CPI), OECD (i)',
+    'Indonesia': 'IMF/IFS (S, CPI, i combined)',
+    'Japan': 'IMF/IFS (S, CPI), OECD (i)',
+    'Korea': 'IMF/IFS (S, CPI, MM rate)',
+    'Mexico': 'IMF/IFS (S, CPI, MM rate)',
+    'New Zealand': 'IMF/IFS (S, CPI interp., MM rate)',
+    'Philippines': 'IMF/IFS (S, CPI, MM rate)',
+    'Switzerland': 'IMF/IFS (S, CPI), OECD (i)',
+    'Thailand': 'IMF/IFS (S, CPI, MM rate)',
+    'Türkiye': 'IMF/IFS (S, CPI, i)',
+    'United Kingdom': 'IMF/IFS (S, CPI), OECD (i)'
+}

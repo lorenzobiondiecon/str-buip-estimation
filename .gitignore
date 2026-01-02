@@ -31,6 +31,12 @@ ENV/
 
 .ipynb_checkpoints
 
+# Documentation and Experiments (Internal)
+
+BUIP_MULTISTART_STRATEGY.md
+STR_ISSUES.md
+experiments/
+
 # Data & Results (Optional: Comment these out if you WANT to upload the CSVs)
 
 data/

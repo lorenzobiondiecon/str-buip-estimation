@@ -9,8 +9,52 @@ Generates LaTeX-formatted tables with:
 """
 import pandas as pd
 import numpy as np
+import re
 from typing import Dict, List, Optional
 from pathlib import Path
+
+
+def transition_var_to_symbol(z_name: str) -> str:
+    """
+    Convert a transition variable name (e.g., 'eta_abs_lag4') into a LaTeX math symbol
+    used in the paper. Returns the symbol without surrounding dollar signs.
+
+    Supported bases:
+      - 'eta' -> q_{t-k}
+      - 'eta_abs' -> |q_{t-k}|
+      - 'ID' -> i^*_{t-k} - i_{t-k}
+      - 'ppp_abs' -> |f^{\\mathrm{PPP}}_{t-k}|
+      - 'drf_abs' -> |f^{\\mathrm{rel}}_{t-k}|
+      - 'rel_misalignment_abs' -> |f^{\\mathrm{rel}}_{t-k} - r_{s,t-k}|
+      - 'drs_abs' -> |r_{s,t-k}|
+      - 'excess_returns' -> er_{t-k} = r_{s,t-k} - (i^*_{t-k} - i_{t-k})
+      - 'excess_returns_abs' -> |er_{t-k}|
+    """
+    m = re.match(r"^([A-Za-z_]+)_lag(\d+)$", str(z_name))
+    if not m:
+        return z_name
+    base, k = m.group(1), m.group(2)
+
+    if base == "eta":
+        return f"q_{{t-{k}}}"
+    if base == "eta_abs":
+        return f"|q_{{t-{k}}}|"
+    if base == "ID":
+        return f"i^*_{{t-{k}}} - i_{{t-{k}}}"
+    if base == "ppp_abs":
+        return f"|f^{{\\mathrm{{PPP}}}}_{{t-{k}}}|"
+    if base == "drf_abs":
+        return f"|f^{{\\mathrm{{rel}}}}_{{t-{k}}}|"
+    if base == "rel_misalignment_abs":
+        return f"|f^{{\\mathrm{{rel}}}}_{{t-{k}}} - r_{{s,t-{k}}}|"
+    if base == "drs_abs":
+        return f"|r_{{s,t-{k}}}|"
+    if base == "excess_returns":
+        return f"er_{{t-{k}}} = r_{{s,t-{k}}} - (i^*_{{t-{k}}} - i_{{t-{k}}})"
+    if base == "excess_returns_abs":
+        return f"|er_{{t-{k}}}|"
+
+    return z_name
 
 
 def format_param_with_stars(value: float, pval: float, decimals: int = 4) -> str:
@@ -336,9 +380,11 @@ def create_lm_test_summary_table(lm_results: Dict[str, pd.DataFrame],
         sig_5pct = (lm_df['p_value_HAC'] < 0.05).sum()
         sig_10pct = (lm_df['p_value_HAC'] < 0.10).sum()
         
+        symbol = transition_var_to_symbol(best['z_var'])
         row = {
             'Country': country,
             'Best_z': best['z_var'],
+            'Symbol': symbol,
             'LM_HAC': f"{best['LM_HAC']:.2f}",
             'p_value': f"{best['p_value_HAC']:.4f}",
             'Sig_1pct': sig_1pct,
@@ -358,12 +404,12 @@ def create_lm_test_summary_table(lm_results: Dict[str, pd.DataFrame],
         latex.append("\\label{tab:lm_tests}")
         latex.append("\\begin{tabular}{lcccccc}")
         latex.append("\\hline\\hline")
-        latex.append("Country & Best $z$ & LM$_{HAC}$ & $p$-value & Sig@1\\% & Sig@5\\% & Sig@10\\% \\\\")
+        latex.append("Country & Best $z$ (symbol) & LM$_{HAC}$ & $p$-value & Sig@1\\% & Sig@5\\% & Sig@10\\% \\\\")
         latex.append("\\hline")
         
         for _, row in df.iterrows():
-            z_short = row['Best_z'].replace('_', '\\_')
-            line = f"{row['Country']} & {z_short} & {row['LM_HAC']} & "
+            sym = row['Symbol']
+            line = f"{row['Country']} & ${{{sym}}}$ & {row['LM_HAC']} & "
             line += f"{row['p_value']} & {row['Sig_1pct']} & {row['Sig_5pct']} & {row['Sig_10pct']} \\\\"
             latex.append(line)
         
