@@ -1,0 +1,46 @@
+This is BibTeX, Version 0.99d (TeX Live 2025)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: BP_Behavioral_FX_Dynamics_20260107.aux
+The style file: apalike.bst
+Database file #1: Behavioral_FX_Dynamics.bib
+You've used 59 entries,
+            1935 wiz_defined-function locations,
+            854 strings with 13014 characters,
+and the built_in function-call counts, 23213 in all, are:
+= -- 2346
+> -- 785
+< -- 55
++ -- 281
+- -- 245
+* -- 2004
+:= -- 3967
+add.period$ -- 181
+call.type$ -- 59
+change.case$ -- 408
+chr.to.int$ -- 57
+cite$ -- 59
+duplicate$ -- 859
+empty$ -- 1715
+format.name$ -- 374
+if$ -- 4545
+int.to.chr$ -- 3
+int.to.str$ -- 0
+missing$ -- 65
+newline$ -- 299
+num.names$ -- 183
+pop$ -- 301
+preamble$ -- 1
+purify$ -- 414
+quote$ -- 0
+skip$ -- 663
+stack$ -- 0
+substring$ -- 1927
+swap$ -- 87
+text.length$ -- 6
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 338
+warning$ -- 0
+while$ -- 217
+width$ -- 0
+write$ -- 769
