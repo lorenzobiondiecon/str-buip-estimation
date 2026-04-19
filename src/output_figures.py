@@ -492,13 +492,14 @@ def plot_country_detailed_analysis(y: pd.Series,
     ax_top.set_ylabel('')
     ax_top.set_xlabel('')
     ax_top.grid(False)
+    ax_top.tick_params(axis='both', labelsize=12)
     plt.setp(ax_top.xaxis.get_majorticklabels(), rotation=0, ha='center')
-    
+
     # ==========================================
     # MIDDLE PANEL: Transition Variable + Threshold
     # ==========================================
     ax_mid = axes[1]
-    ax_mid.plot(transition_var.index, transition_var.values, 
+    ax_mid.plot(transition_var.index, transition_var.values,
                 color='black', linewidth=0.7)
     ax_mid.axhline(c_threshold, color='black', linestyle='--', linewidth=0.7)
     ax_mid.spines['top'].set_visible(True)
@@ -508,13 +509,14 @@ def plot_country_detailed_analysis(y: pd.Series,
     ax_mid.set_ylabel('')
     ax_mid.set_xlabel('')
     ax_mid.grid(False)
+    ax_mid.tick_params(axis='both', labelsize=12)
     plt.setp(ax_mid.xaxis.get_majorticklabels(), rotation=0, ha='center')
-    
+
     # ==========================================
     # BOTTOM PANEL: Transition Function
     # ==========================================
     ax_bot = axes[2]
-    ax_bot.plot(transition_func.index, transition_func.values, 
+    ax_bot.plot(transition_func.index, transition_func.values,
                 color='black', linewidth=0.7)
     ax_bot.set_ylim(0.0, 1.0)
     ax_bot.spines['top'].set_visible(True)
@@ -524,6 +526,7 @@ def plot_country_detailed_analysis(y: pd.Series,
     ax_bot.set_ylabel('')
     ax_bot.set_xlabel('')
     ax_bot.grid(False)
+    ax_bot.tick_params(axis='both', labelsize=12)
     plt.setp(ax_bot.xaxis.get_majorticklabels(), rotation=0, ha='center')
     
     plt.tight_layout()
