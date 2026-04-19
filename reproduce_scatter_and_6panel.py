@@ -93,8 +93,6 @@ for country_name in str_results.keys():
         ax.set_xlim(x_grid.min(), x_grid.max())
         ax.set_ylim(-0.05, 1.05)
         ax.set_title(f"{country_name}", fontsize=11)
-        ax.set_xlabel(f"Transition Variable: {z_name}", fontsize=10)
-        ax.set_ylabel("G(z)", fontsize=10)
         ax.tick_params(axis='both', labelsize=10)
         ax.margins(x=0, y=0)
         for spine in ["top", "right", "bottom", "left"]:
@@ -133,8 +131,6 @@ for country_name in buip_results.keys():
         ax.set_xlim(x_grid.min(), x_grid.max())
         ax.set_ylim(-0.05, 1.05)
         ax.set_title(f"{country_name}", fontsize=11)
-        ax.set_xlabel("Utility Differential (U_f - U_c)", fontsize=10)
-        ax.set_ylabel("ω", fontsize=10)
         ax.tick_params(axis='both', labelsize=10)
         ax.margins(x=0, y=0)
         for spine in ["top", "right", "bottom", "left"]:
