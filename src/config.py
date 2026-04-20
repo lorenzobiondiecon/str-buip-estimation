@@ -16,6 +16,11 @@ class Config:
     DATA_DIR.mkdir(exist_ok=True)
     OUTPUT_DIR.mkdir(exist_ok=True)
 
+    # Covid sample exclusion
+    # Set True to drop all observations after COVID_CUTOFF; results go to results/no-covid/
+    EXCLUDE_POST_COVID = True
+    COVID_CUTOFF = "2019-12-31"  # Last date kept when EXCLUDE_POST_COVID = True
+
     # Econometric Settings
     P_MAX_HAC = 4          # Lag length for Newey-West errors
     GRID_POINTS = 30       # Density of grid for gamma/c search

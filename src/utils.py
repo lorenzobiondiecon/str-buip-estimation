@@ -125,9 +125,18 @@ def load_dataset(use_max: bool = False) -> Tuple[pd.DataFrame, Path, Path, Path,
     else:
         logger.info(f"Loading existing dataset from {data_path}")
         df_panel = pd.read_csv(data_path, parse_dates=["date"])
-    
+
+    # Optionally drop post-covid observations
+    if config.EXCLUDE_POST_COVID:
+        cutoff = pd.Timestamp(config.COVID_CUTOFF)
+        df_panel = df_panel[df_panel["date"] <= cutoff]
+        logger.info(f"Post-covid exclusion active: sample truncated at {config.COVID_CUTOFF}")
+
     # Configure output directories
-    output_dir = config.OUTPUT_DIR / mode
+    if config.EXCLUDE_POST_COVID:
+        output_dir = config.OUTPUT_DIR / "no-covid" / mode
+    else:
+        output_dir = config.OUTPUT_DIR / mode
     tables_dir = output_dir / 'tables'
     figures_dir = output_dir / 'figures'
     agg_fig_dir = figures_dir / 'aggregate'
