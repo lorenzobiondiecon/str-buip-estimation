@@ -1,0 +1,31 @@
+\begin{table}[htbp]
+\centering
+\caption{BUIP Model: Cost Parameter Validation}
+\label{tab:buip_threshold_validation}
+\begin{tabular}{lcccc}
+\toprule
+Country & Min($U_f - U_c$) & Max($U_f - U_c$) & Estimated $c$ & In Range \\
+\midrule
+Australia & -0.3525 & 0.1418 & -0.1377 & YES \\
+Brazil & -0.3577 & 0.6682 & 0.0998 & YES \\
+Canada & -0.1280 & 0.1800 & 0.0725 & YES \\
+Euro Area & -0.0919 & 0.1617 & 0.0278 & YES \\
+Indonesia & -1.1725 & 10.7067 & -0.5137 & YES \\
+Japan & -0.1551 & 73.6518 & -14.2687 & \textbf{NO} \\
+Korea & -0.5423 & 0.5177 & -0.5513 & \textbf{NO} \\
+Mexico & -0.1770 & 0.7053 & 0.0041 & YES \\
+New Zealand & -0.2410 & 0.2485 & -0.0014 & YES \\
+Philippines & -1.0253 & -0.2595 & -0.3544 & YES \\
+Switzerland & -0.2022 & 0.2606 & 0.0021 & YES \\
+Thailand & -0.2711 & 0.2314 & -0.2108 & YES \\
+Türkiye & -0.2931 & 0.3385 & 0.0016 & YES \\
+United Kingdom & -0.1269 & 0.1152 & 0.1443 & \textbf{NO} \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}[para,flushleft]
+\small
+\textit{Note}: This table checks whether the estimated cost parameter $c$ falls within the 
+observed range of the utility differential $(U_f - U_c)$. 
+Bold \textbf{NO} indicates the threshold is outside the data range, which may affect identification.
+\end{tablenotes}
+\end{table}

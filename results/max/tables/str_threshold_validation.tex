@@ -1,0 +1,33 @@
+\begin{table}[htbp]
+\centering
+\caption{STR Model: Threshold Parameter Validation}
+\label{tab:str_threshold_validation}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccc}
+\toprule
+Country & Transition Variable & Min($z$) & Max($z$) & Estimated $c$ & In Range \\
+\midrule
+Australia & rel_misalignment_abs_lag3 & 0.0000 & 0.1712 & -0.4191 & \textbf{NO} \\
+Brazil & rel_misalignment_abs_lag2 & 0.0000 & 0.4902 & 0.1037 & YES \\
+Canada & rel_misalignment_abs_lag2 & 0.0000 & 0.1241 & 0.0113 & YES \\
+Euro Area & drs_abs_lag3 & 0.0000 & 0.1144 & 0.0036 & YES \\
+Indonesia & rel_misalignment_abs_lag4 & 0.0000 & 0.7352 & 0.0722 & YES \\
+Japan & rel_misalignment_abs_lag2 & 0.0001 & 0.1546 & 0.0279 & YES \\
+Korea & rel_misalignment_abs_lag4 & 0.0000 & 0.1857 & 0.0822 & YES \\
+Mexico & rel_misalignment_abs_lag4 & 0.0000 & 0.5518 & -0.3324 & \textbf{NO} \\
+New Zealand & ID_abs_lag4 & 0.0000 & 0.0370 & 0.0023 & YES \\
+Philippines & drs_abs_lag3 & 0.0000 & 0.2513 & 0.0004 & YES \\
+Switzerland & drf_abs_lag2 & 0.0000 & 0.0155 & 0.0078 & YES \\
+Thailand & drf_abs_lag5 & 0.0000 & 0.0734 & 5.0255 & \textbf{NO} \\
+Türkiye & drf_abs_lag4 & 0.0000 & 0.2088 & -0.4381 & \textbf{NO} \\
+United Kingdom & drf_abs_lag3 & 0.0000 & 0.0226 & 0.1272 & \textbf{NO} \\
+\bottomrule
+\end{tabular}%
+}
+\begin{tablenotes}[para,flushleft]
+\small
+\textit{Note}: This table checks whether the estimated threshold parameter $c$ falls within the 
+observed range of the transition variable $z$. 
+Bold \textbf{NO} indicates the threshold is outside the data range, which may affect identification.
+\end{tablenotes}
+\end{table}

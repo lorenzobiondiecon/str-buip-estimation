@@ -1,0 +1,15 @@
+Country,Transition Variable,P-value
+Australia,rel_misalignment_abs_lag3,0.2426
+Brazil,rel_misalignment_abs_lag2,0.0000
+Canada,rel_misalignment_abs_lag2,0.0000
+Euro Area,drs_abs_lag3,0.0112
+Indonesia,rel_misalignment_abs_lag4,0.0000
+Japan,rel_misalignment_abs_lag2,0.0071
+Korea,rel_misalignment_abs_lag4,0.0000
+Mexico,rel_misalignment_abs_lag4,0.0000
+New Zealand,ID_abs_lag4,0.0059
+Philippines,drs_abs_lag3,0.0173
+Switzerland,drf_abs_lag2,0.0000
+Thailand,drf_abs_lag5,0.0000
+Türkiye,drf_abs_lag4,0.0000
+United Kingdom,drf_abs_lag3,0.0151

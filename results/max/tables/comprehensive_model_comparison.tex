@@ -1,0 +1,31 @@
+
+\begin{table}[htbp]
+\centering
+\caption{Comprehensive Model Comparison: RMSE and AIC by Country}
+\label{tab:comprehensive_model_comparison}
+\begin{tabular}{l|ccc|ccc}
+\toprule
+ & \multicolumn{3}{c|}{RMSE (lower is better)} & \multicolumn{3}{c}{AIC (lower is better)} \\
+Country & Linear & STR & BUIP & Linear & STR & BUIP \\
+\midrule
+Australia            &     0.0322 &     0.0322 & \textbf{0.0319} & \textbf{-3506.13} &   -3485.40 &   -3494.91 \\
+Brazil               &     0.1187 &     0.1145 & \textbf{0.1060} &   -2180.25 &   -2206.95 & \textbf{-2281.42} \\
+Canada               &     0.0205 &     0.0204 & \textbf{0.0202} & \textbf{-3981.07} &   -3971.79 &   -3975.31 \\
+Euro Area            &     0.0268 &     0.0267 & \textbf{0.0261} & \textbf{-2289.66} &   -2270.48 &   -2283.96 \\
+Indonesia            &     0.0609 &     0.0571 & \textbf{0.0442} &   -2608.09 &   -2644.93 & \textbf{-2888.09} \\
+Japan                &     0.0302 & \textbf{0.0296} &     0.0297 &   -3339.64 & \textbf{-3347.17} &   -3335.19 \\
+Korea                &     0.0290 &     0.0275 & \textbf{0.0274} &   -3618.03 &   -3646.03 & \textbf{-3657.41} \\
+Mexico               &     0.0535 & \textbf{0.0433} &     0.0522 &   -2999.03 & \textbf{-3189.84} &   -3004.90 \\
+New Zealand          &     0.0342 & \textbf{0.0337} &     0.0337 & \textbf{-3247.73} &   -3236.92 &   -3242.61 \\
+Philippines          &     0.0289 & \textbf{0.0283} &     0.0287 &   -3332.12 & \textbf{-3332.67} &   -3319.56 \\
+Switzerland          &     0.0307 &     0.0304 & \textbf{0.0303} & \textbf{-3574.48} &   -3573.40 &   -3567.17 \\
+Thailand             &     0.0273 &     0.0274 & \textbf{0.0270} & \textbf{-3113.05} &   -3075.45 &   -3102.66 \\
+Türkiye              &     0.0560 & \textbf{0.0529} &     0.0537 &   -2698.32 & \textbf{-2727.91} &   -2720.02 \\
+United Kingdom       &     0.0278 &     0.0277 & \textbf{0.0272} & \textbf{-3677.91} &   -3660.45 &   -3677.27 \\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}[para]
+\small
+\textit{Note}: Bold values indicate the best (lowest) measure for each metric within each country. RMSE = Root Mean Squared Error, AIC = Akaike Information Criterion. Linear = Linear ARX model, STR = Smooth Transition Regression, BUIP = Behavioral Uncovered Interest Parity.
+\end{tablenotes}
+\end{table}
