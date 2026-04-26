@@ -18,8 +18,12 @@ class Config:
 
     # Covid sample exclusion
     # Set True to drop all observations after COVID_CUTOFF; results go to results/no-covid/
-    EXCLUDE_POST_COVID = True
+    EXCLUDE_POST_COVID = False
     COVID_CUTOFF = "2019-12-31"  # Last date kept when EXCLUDE_POST_COVID = True
+
+    # Per-country start date truncation for robustness checks.
+    # Format: {"Country Name": "YYYY-MM-DD"}. None means no truncation.
+    COUNTRY_START_DATES: Dict[str, str] = None
 
     # Econometric Settings
     P_MAX_HAC = 4          # Lag length for Newey-West errors

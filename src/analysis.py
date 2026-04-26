@@ -394,9 +394,16 @@ def estimate_all_countries(df_panel: pd.DataFrame, countries: Dict[str, str],
     str_results = {}
     buip_results = {}
     
+    from .config import config as _config
+
     # Sort countries for deterministic iteration order
     for country_name in sorted(countries.keys()):
         country_df = df_panel[df_panel['country'] == country_name].copy().set_index('date').sort_index()
+
+        # Apply per-country start date truncation if configured
+        if _config.COUNTRY_START_DATES and country_name in _config.COUNTRY_START_DATES:
+            start = pd.Timestamp(_config.COUNTRY_START_DATES[country_name])
+            country_df = country_df[country_df.index >= start]
         
         # STR estimation
         if model_type in ['str', 'both']:

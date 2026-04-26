@@ -84,18 +84,22 @@ def build_beh_sample(df: pd.DataFrame) -> pd.DataFrame:
     return x
 
 
-def load_dataset(use_max: bool = False) -> Tuple[pd.DataFrame, Path, Path, Path, Path]:
+def load_dataset(use_max: bool = False, label: str = None) -> Tuple[pd.DataFrame, Path, Path, Path, Path]:
     """
     Load or build dataset with automatic directory setup.
-    
+
     Consolidates the dataset loading logic used across notebooks.
-    
+
     Parameters
     ----------
     use_max : bool, default=False
         If True, load/build maximum-length dataset.
         If False, load/build restricted dataset (2000-2024).
-    
+    label : str, optional
+        Override the output subdirectory name. Useful for robustness checks
+        that need their own results folder (e.g. 'truncated'). Defaults to
+        the dataset mode ('max' or 'restricted').
+
     Returns
     -------
     tuple
@@ -108,7 +112,7 @@ def load_dataset(use_max: bool = False) -> Tuple[pd.DataFrame, Path, Path, Path,
     """
     from .config import config
     from .data_builder import DataBuilder
-    
+
     # Determine dataset path
     if use_max:
         data_path = config.DATA_DIR / "df_panel_max.csv"
@@ -116,7 +120,7 @@ def load_dataset(use_max: bool = False) -> Tuple[pd.DataFrame, Path, Path, Path,
     else:
         data_path = config.DATA_DIR / "df_panel_final.csv"
         mode = "restricted"
-    
+
     # Load or build dataset
     if not data_path.exists():
         logger.info(f"Building {mode} dataset from DBnomics...")
@@ -133,10 +137,11 @@ def load_dataset(use_max: bool = False) -> Tuple[pd.DataFrame, Path, Path, Path,
         logger.info(f"Post-covid exclusion active: sample truncated at {config.COVID_CUTOFF}")
 
     # Configure output directories
+    subdir = label if label else mode
     if config.EXCLUDE_POST_COVID:
-        output_dir = config.OUTPUT_DIR / "no-covid" / mode
+        output_dir = config.OUTPUT_DIR / "no-covid" / subdir
     else:
-        output_dir = config.OUTPUT_DIR / mode
+        output_dir = config.OUTPUT_DIR / subdir
     tables_dir = output_dir / 'tables'
     figures_dir = output_dir / 'figures'
     agg_fig_dir = figures_dir / 'aggregate'
