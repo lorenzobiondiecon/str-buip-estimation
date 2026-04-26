@@ -84,7 +84,7 @@ def build_beh_sample(df: pd.DataFrame) -> pd.DataFrame:
     return x
 
 
-def load_dataset(use_max: bool = False, label: str = None) -> Tuple[pd.DataFrame, Path, Path, Path, Path]:
+def load_dataset(use_max: bool = False, label: str = None, exclude_post_covid: bool = None) -> Tuple[pd.DataFrame, Path, Path, Path, Path]:
     """
     Load or build dataset with automatic directory setup.
 
@@ -99,6 +99,9 @@ def load_dataset(use_max: bool = False, label: str = None) -> Tuple[pd.DataFrame
         Override the output subdirectory name. Useful for robustness checks
         that need their own results folder (e.g. 'truncated'). Defaults to
         the dataset mode ('max' or 'restricted').
+    exclude_post_covid : bool, optional
+        If True, drop observations after config.COVID_CUTOFF and write results
+        to results/no-covid/. If None (default), use config.EXCLUDE_POST_COVID.
 
     Returns
     -------
@@ -112,6 +115,9 @@ def load_dataset(use_max: bool = False, label: str = None) -> Tuple[pd.DataFrame
     """
     from .config import config
     from .data_builder import DataBuilder
+
+    if exclude_post_covid is None:
+        exclude_post_covid = config.EXCLUDE_POST_COVID
 
     # Determine dataset path
     if use_max:
@@ -131,14 +137,14 @@ def load_dataset(use_max: bool = False, label: str = None) -> Tuple[pd.DataFrame
         df_panel = pd.read_csv(data_path, parse_dates=["date"])
 
     # Optionally drop post-covid observations
-    if config.EXCLUDE_POST_COVID:
+    if exclude_post_covid:
         cutoff = pd.Timestamp(config.COVID_CUTOFF)
         df_panel = df_panel[df_panel["date"] <= cutoff]
         logger.info(f"Post-covid exclusion active: sample truncated at {config.COVID_CUTOFF}")
 
     # Configure output directories
     subdir = label if label else mode
-    if config.EXCLUDE_POST_COVID:
+    if exclude_post_covid:
         output_dir = config.OUTPUT_DIR / "no-covid" / subdir
     else:
         output_dir = config.OUTPUT_DIR / subdir
