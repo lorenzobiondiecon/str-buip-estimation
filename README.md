@@ -266,4 +266,5 @@ hit DBnomics and rebuild the file.
 
 ## License
 
-See `LICENSE`.
+This code is released under the MIT License. See `LICENSE` for the full
+text. If you use this code in academic work, please cite the paper.
