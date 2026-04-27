@@ -1,233 +1,269 @@
-# STR-BUIP Exchange Rate Estimation
+# Behavioral FX Dynamics: Replication Code
 
-This repository contains the code for estimating **Smooth Transition Regression (STR)** and **Behavioral Uncovered Interest Parity (BUIP)** models to investigate exchange rate dynamics across 14 countries.
+Replication materials for **"Behavioral FX Dynamics"** (Biondi and Proaño,
+2026). The repository estimates Smooth Transition Regression (STR) and
+Behavioral Uncovered Interest Parity (BUIP) models for monthly bilateral
+USD exchange rates of 14 advanced and emerging economies, and reproduces
+all empirical results, tables, and figures in the paper.
 
-## Overview
-
-The project automates the complete econometric pipeline:
-
-1.  **Data Collection**: Fetches macroeconomic time-series (Exchange Rates, Interest Rates, CPI) from DBnomics (sources: IMF, OECD).
-2.  **Data Processing**: Constructs a clean panel dataset with necessary transformations (log-differences, real exchange rates, PPP deviations).
-3.  **Econometric Analysis**:
-    -   **STR Models**: Tests for non-linearity via LM tests, selects optimal transition variables, estimates regime-switching models
-    -   **BUIP Models**: Estimates behavioral models with utility-based regime switching between chartist and fundamentalist strategies
-4.  **Results Generation**: Produces publication-ready tables (LaTeX + CSV) and figures (PDF + PNG)
-
-## Project Structure
+## What this repository contains
 
 ```
-├── main_reproduction.ipynb    # Main notebook - run this to reproduce all results
-├── Requirements.txt           # Python dependencies
-├── src/
-│   ├── notebook_setup.py     # Consolidated imports and notebook initialization
-│   ├── config.py             # Configuration settings and country definitions
-│   ├── analysis.py           # Estimation functions and diagnostic tests
-│   ├── data_builder.py       # Data fetching and processing from DBnomics
-│   ├── econometrics.py       # STR and BUIP model classes
-│   ├── output_figures.py     # Figure generation functions
-│   ├── output_tables.py      # Table generation utilities
-│   └── utils.py              # Helper functions (data loading, etc.)
+.
+├── main_reproduction.ipynb     Single entry point. Runs the full pipeline.
+├── Requirements.txt            Python dependencies.
 ├── data/
-│   ├── df_panel_final.csv    # Restricted dataset (2000-2024)
-│   └── df_panel_max.csv      # Maximum-length dataset (country-specific periods)
-└── results/
-    ├── restricted/           # Results for restricted dataset
-    │   ├── tables/          # CSV + LaTeX tables
-    │   └── figures/         # PDF + PNG figures
-    └── max/                  # Results for maximum-length dataset
-        ├── tables/
-        └── figures/
+│   └── df_panel_max.csv        Panel dataset (snapshot used in the paper).
+├── results/
+│   └── max/                    All paper outputs.
+│       ├── tables/             10 tables, both .csv and .tex.
+│       └── figures/
+│           ├── aggregate/      10 cross-country figures.
+│           └── country/        56 country-specific figures (14 × 4).
+└── src/
+    ├── config.py               Paths, country list, econometric settings.
+    ├── data_builder.py         DBnomics fetch and panel construction.
+    ├── utils.py                Dataset loading and sample preparation.
+    ├── analysis.py             STR/BUIP estimation pipeline.
+    ├── econometrics.py         STR and BUIP model classes.
+    ├── output_tables.py        LaTeX/CSV table generation.
+    ├── output_figures.py       Publication-quality figure generation.
+    └── notebook_setup.py       Consolidated imports for the notebook.
 ```
 
-## Key Features
-
-- **Clean Notebook Interface**: Single notebook (`main_reproduction.ipynb`) with all complex functions modularized in `src/`
-- **Automatic Setup**: `notebook_setup.py` handles all imports and configuration in one line
-- **Dataset Flexibility**: Choose between restricted (2000-2024) or maximum-length (country-specific) datasets
-- **Automatic Transition Variable Selection**: Tests 35 candidates per country, selects best via LM linearity test
-- **Publication-Ready Outputs**: LaTeX tables with bold significance markers, high-quality PDF/PNG figures
-- **Two Model Specifications**: STR (restricted) and BUIP (behavioral)
-- **Comprehensive Diagnostics**: Ljung-Box, ARCH, and Jarque-Bera tests for all models
-
-## Quick Start
-
-### Interactive Notebook (Recommended)
-
-The easiest way to reproduce all results:
+## Quick replication
 
 ```bash
-# 1. Install dependencies
+# 1. Clone and enter the repository
+git clone https://github.com/lorenzobiondiecon/str-buip-estimation.git
+cd str-buip-estimation
+
+# 2. (Optional but recommended) Create a virtual environment
+python3 -m venv venv
+source venv/bin/activate    # Windows: venv\Scripts\activate
+
+# 3. Install dependencies
 pip install -r Requirements.txt
 
-# 2. Open the main notebook
+# 4. Open the notebook and run all cells
 jupyter notebook main_reproduction.ipynb
-
-# 3. Run all cells sequentially (or "Run All")
 ```
 
-**What happens when you run the notebook:**
-- Automatically loads or builds the dataset from DBnomics
-- Estimates STR and BUIP models for all 14 countries (~15-30 minutes)
-- Generates all tables (CSV + LaTeX) and figures (PDF + PNG)
-- Provides progress updates and diagnostics
-- Saves results to `results/max/` or `results/restricted/`
+Total runtime: 15 to 30 minutes for the 14 countries.
 
-**Configuration options:**
-- Set `USE_MAX_DATASET = True/False` to choose dataset mode
-- Modify `model_type='both'` to run only `'str'` or `'buip'` models
-- Test mode available: Run with 2 countries first (~3 minutes)
+The notebook will:
+- Load `data/df_panel_max.csv` if it exists, or fetch the raw series from
+  DBnomics and rebuild it.
+- Estimate STR and BUIP models for each country.
+- Write all tables and figures to `results/max/`.
 
-## Understanding the Code Structure
+## Reproducing specific outputs in the paper
 
-### For Users (Replication)
+The notebook has two user-facing toggles in the data-loading cell. They are
+the only switches you need.
 
-**Just open and run `main_reproduction.ipynb`** - it's self-contained and well-documented. All technical details are handled behind the scenes.
-
-The notebook uses a streamlined setup:
 ```python
-from src.notebook_setup import (
-    np, pd, plt, config, COUNTRIES,
-    load_dataset, estimate_all_countries
-)
+USE_MAX_DATASET    = True     # See "Dataset modes" below.
+EXCLUDE_POST_COVID = False    # See "Pre-COVID robustness" below.
 ```
 
-### For Developers (Modification)
+### Main results (Tables 1 to 6, all 67 figures)
 
-**Module Organization:**
+```python
+USE_MAX_DATASET    = True
+EXCLUDE_POST_COVID = False
+```
 
-- **`src/notebook_setup.py`**: One-line setup for notebooks
-  - Consolidates all imports (numpy, pandas, matplotlib, etc.)
-  - Provides `setup_notebook()` and helper functions
-  - Exports `COUNTRIES` and `DATA_SOURCES` from config
+Run all cells. Output lands in `results/max/`. This reproduces:
 
-- **`src/config.py`**: Central configuration
-  - Paths (data, results directories)
-  - Econometric settings (HAC lags, grid points, tolerance)
-  - Country definitions and data sources
+- **Table 1**: STR parameter estimates.
+- **Table 2**: STR residual diagnostics.
+- **Table 3**: BUIP parameter estimates.
+- **Table 4**: BUIP residual diagnostics.
+- **Table 5**: Linear / STR / BUIP comparison (RMSE, AIC, BIC).
+- **Table 6**: Threshold and identification validation.
+- All 10 cross-country figures (`results/max/figures/aggregate/`).
+- All 56 country figures (`results/max/figures/country/`).
 
-- **`src/analysis.py`**: Core estimation and diagnostics
-  - `build_z_candidates()`: Generates 35 transition variable candidates
-  - `lm_linearity_test_for_z()`: LM linearity test with HAC standard errors
-  - `estimate_str_model()`: Complete STR estimation pipeline
-  - `estimate_buip_model()`: Complete BUIP estimation pipeline
-  - `estimate_all_countries()`: Batch estimation wrapper
-  - Diagnostic tests: `ljung_box_test()`, `arch_test()`, `jarque_bera_test()`
+These outputs are already committed under `results/max/`, so you can also
+inspect the paper's figures and tables directly without rerunning the
+pipeline.
 
-- **`src/econometrics.py`**: Model implementations
-  - `STRModel`: Smooth Transition Regression (LSTR1)
-  - `BUIPModel`: Behavioral UIP with utility-based switching
+### Pre-COVID robustness (Section 5.3, Table 7)
 
-- **`src/utils.py`**: Helper functions
-  - `load_dataset()`: Unified dataset loading with auto-build
-  - `build_str_data()`, `build_beh_sample()`: Data preparation
+```python
+USE_MAX_DATASET    = True
+EXCLUDE_POST_COVID = True
+```
 
-- **`src/data_builder.py`**: Data fetching from DBnomics
-  - Fetches from IMF/IFS and OECD APIs
-  - Handles interpolation and data gaps
-  - Builds both restricted and maximum-length datasets
+Run all cells. Output lands in `results/no-covid/max/`. The sample is
+truncated at `2019-12-31` (configurable in `src/config.py` via
+`COVID_CUTOFF`). This reproduces Table 7, which reports STR estimates for
+the United Kingdom and BUIP estimates for Japan, Korea, and Türkiye on the
+pre-pandemic sample.
 
-- **`src/output_figures.py`**: Publication-quality plotting
-- **`src/output_tables.py`**: LaTeX table generation
+## Dataset modes
 
-## Output Files
+`USE_MAX_DATASET = True` (default, used in the paper) loads
+`data/df_panel_max.csv`: each country uses the longest continuous span in
+which the nominal exchange rate, CPI, and short rate are jointly available,
+with country-specific trims for known data gaps in Indonesia, Korea, and
+the Philippines. Sample bounds run from the early 1980s to 2025.
 
-After running the notebook, results are saved to `results/max/` or `results/restricted/` depending on dataset choice.
+`USE_MAX_DATASET = False` builds (or loads) `df_panel_final.csv`, which
+restricts the sample to the common 2000-01 through 2024-12 window. This
+mode is provided for cross-country comparisons over a uniform window and
+is not the specification reported in the paper.
 
-**Tables** (in `{mode}/tables/`):
-- `data_availability_sources`: Data coverage and sources by country
-- `descriptive_statistics`: Summary statistics for all variables
-- `transition_variable_selection`: Selected transition variables with LM test p-values
-- `str_results_table`: STR parameter estimates with significance stars
-- `buip_results_table`: BUIP parameter estimates with significance stars
-- `str_diagnostics_table`: STR residual diagnostics (Ljung-Box, ARCH, Jarque-Bera)
-- `buip_diagnostics_table`: BUIP residual diagnostics
-- `str_threshold_validation`: Gamma and threshold parameter validation
-- `buip_threshold_validation`: Cost parameter validation
-- `comprehensive_model_comparison`: AIC, BIC, RMSE comparison across models
+## How the dataset is built
 
-All tables available in both `.csv` and `.tex` formats.
+`src/data_builder.py` fetches monthly series from DBnomics:
 
-**Aggregate Figures** (in `{mode}/figures/aggregate/`):
-- `str_regime_distribution`: Histogram of STR regime probabilities
-- `buip_regime_distribution`: Histogram of BUIP regime probabilities
-- `regime_prevalence_comparison`: Chartist vs Fundamentalist prevalence
-- `str_gamma_comparison`: Transition smoothness by country
-- `buip_gamma_comparison`: Behavioral switching speed by country
-- `str_buip_rmse_comparison`: Model fit comparison
-- `log_nominal_vs_ppp_6panel`: Exchange rate vs PPP comparison
-14 countries spanning advanced and emerging economies:
+| Variable | Source | DBnomics code |
+| --- | --- | --- |
+| Nominal exchange rate (LCU per USD) | IMF/IFS | `M.<ISO2>.ENDE_XDC_USD_RATE` |
+| Consumer price index | IMF/IFS | `M.<ISO2>.PCPI_IX` |
+| Policy rate (AUS, IDN, TUR) | IMF/IFS | `M.<ISO2>.FPOLM_PA` |
+| Money market rate (BRA, KOR, MEX, NZL, PHL, THA) | IMF/IFS | `M.<ISO2>.FIMM_PA` |
+| Short rate (CAN, CHE, EA, GBR, JPN) | OECD | `OECD/DSD_KEI@DF_KEI/<ISO3>.M.IRSTCI.PA._Z._Z._Z` |
+| US CPI and federal funds rate (benchmark) | IMF/IFS | `M.US.PCPI_IX`, `M.US.FPOLM_PA` |
+| Euro Area HICP | IMF/IFS | `M.U2.PCPIHA_IX` |
+| Australia and New Zealand CPI | IMF/IFS quarterly, spline-interpolated to monthly via DBnomics filter | `Q.<ISO2>.PCPI_IX` |
 
-**Advanced:** Australia, Canada, Euro Area, Japan, New Zealand, Switzerland, United Kingdom
+Country-specific patches handled in `data_builder.py`:
 
-**Emerging:** Brazil, Indonesia, Korea, Mexico, Philippines, Thailand, Türkiye
+- **Indonesia**: policy-rate gaps filled with the money-market rate.
+- **Philippines**: missing 2022-01 policy rate linearly interpolated.
 
-Country definitions and ISO codes are centrally managed in `src/config.py`.
+After fetching, `engineer_features()` constructs the variables used in
+estimation:
 
-## Dataset Modes
+| Variable | Formula | Description |
+| --- | --- | --- |
+| `s` | `log(S)` | Log nominal exchange rate. |
+| `p_dom`, `p_for` | `log(CPI)` | Log price levels. |
+| `r_s` | `Δs` | Nominal exchange rate return. |
+| `q` | `s + p_for − p_dom` | Real exchange rate (logs). |
+| `i_dom`, `i_for` | `(1 + r/100)^(1/12) − 1` | Annual rate converted to monthly effective. |
+| `f_ppp` | `p_dom − p_for` | PPP fundamental level. |
+| `f_ppp_rel` | `Δp_dom − Δp_for` | Inflation differential. |
+| `r_q` | `r_s − f_ppp_rel` | Excess return over PPP. |
 
-**Restricted Dataset** (`df_panel_final.csv`):
-- Common period: 2000-01 to 2024-12
-- Consistent comparison across all countries
-- Recommended for cross-country analysis
+The dependent variable in both STR and BUIP estimation is the excess
+return on the long-domestic carry trade,
+`y = r_s − (i_for − i_dom)`.
 
-**Maximum-Length Dataset** (`df_panel_max.csv`):
-- Country-specific periods based on data availability
-- Maximizes sample size per country
-- Custom handling for Indonesia, Korea, Philippines (data gaps)
-- Useful for within-country analysis
+## Estimation details
 
-Switch between modes by setting `USE_MAX_DATASET = True/False` in the notebook.
-- Korea
-- MTechnical Details
+For each country, `src/analysis.py`:
 
-**Estimation Methods:**
-- **Grid Search**: Initial parameter search over gamma (0.125-256) and c (5th-95th percentiles)
-- **Nonlinear Least Squares**: Refinement with HAC-robust standard errors
-- **Multistart Optimization**: BUIP models use multiple random starts to avoid local minima
-- **HAC Standard Errors**: Newey-West (1994) automatic bandwidth selection
+1. Builds 35 candidate transition variables (7 base series × 5 lags).
+2. Selects the candidate with the lowest p-value in a HAC-robust LM
+   linearity test.
+3. Runs a 120 × 120 grid search over `(γ, c)` for STR and a multistart NLS
+   for BUIP.
+4. Refines via nonlinear least squares with Newey-West HAC standard
+   errors (automatic 1994 bandwidth).
+5. Computes residual diagnostics: Ljung-Box Q, ARCH LM, Jarque-Bera.
 
-**Model Diagnostics:**
-- Ljung-Box Q-test for autocorrelation
-- ARCH test for conditional heteroskedasticity
-- Jarque-Bera test for normality
-- Regime occupancy and persistence metrics
+## Output files generated by the notebook
 
-**Computational Performance:**
-- ~1-2 minutes per country (STR + BUIP)
-- Total runtime: 15-30 minutes for 14 countries
-- Parallel processing not currently implemented but feasible
+Tables (CSV and LaTeX in `results/max/tables/`):
+
+| File | Paper |
+| --- | --- |
+| `data_availability_sources` | Data appendix table. |
+| `descriptive_statistics` | Summary statistics. |
+| `transition_variable_selection` | STR transition-variable choice per country. |
+| `str_results_table`, `str_results_with_ci` | Table 1. |
+| `str_diagnostics_table` | Table 2. |
+| `str_threshold_validation` | Table 6 (STR rows). |
+| `buip_results_table`, `buip_results_with_ci` | Table 3. |
+| `buip_diagnostics_table` | Table 4. |
+| `buip_threshold_validation` | Table 6 (BUIP rows). |
+| `comprehensive_model_comparison` | Table 5. |
+
+Aggregate figures (`results/max/figures/aggregate/`):
+
+| File | Description |
+| --- | --- |
+| `raw_series_exchange_rate` | Log nominal exchange rates. |
+| `raw_series_cpi_dom` | Domestic CPI levels. |
+| `raw_series_interest_dom` | Domestic short rates. |
+| `log_nominal_vs_ppp_6panel` | Six-panel comparison of nominal rate and PPP fundamental. |
+| `returns_logS_vs_logPPP_6panel` | Six-panel comparison of returns and inflation differential. |
+| `str_regime_distribution`, `str_regime_distribution_groups` | STR regime histogram, pooled and by group. |
+| `buip_regime_distribution`, `buip_regime_distribution_groups` | BUIP regime histogram, pooled and by group. |
+| `regime_prevalence_comparison` | STR vs BUIP regime prevalence by country. |
+
+Country figures (`results/max/figures/country/`): for each of the 14
+countries, four PDFs are produced.
+
+- `<Country>_str_detailed`: STR fit, transition function, and regime path.
+- `<Country>_str_scatter`: STR fitted vs actual scatter.
+- `<Country>_buip_detailed`: BUIP fit, market shares, and regime path.
+- `<Country>_buip_scatter`: BUIP fitted vs actual scatter.
+
+## Countries
+
+Advanced: Australia, Canada, Euro Area, Japan, New Zealand, Switzerland,
+United Kingdom.
+
+Emerging: Brazil, Indonesia, Korea, Mexico, Philippines, Thailand,
+Türkiye.
+
+Country definitions and ISO codes are in `src/config.py`.
+
+## Software requirements
+
+- Python 3.9 or newer.
+- Packages listed in `Requirements.txt`: `numpy`, `pandas`, `scipy`,
+  `statsmodels`, `matplotlib`, `seaborn`, `tqdm`, `dbnomics`.
+- An internet connection is needed only the first time, when the dataset
+  is rebuilt from DBnomics. Afterwards `data/df_panel_max.csv` is reused.
 
 ## Troubleshooting
 
-**ImportError after code changes:**
-- Restart Jupyter kernel (Kernel → Restart)
-- The notebook includes `%autoreload` to minimize this issue
+**The notebook tries to fetch from DBnomics and fails.**
+Confirm the internet connection. If DBnomics is rate-limiting or
+unreachable, simply rerun later. As long as `data/df_panel_max.csv` is
+present (which it is in this repository), the notebook will skip the
+fetch.
 
-**Missing data or build errors:**
-- Delete files in `data/` folder to trigger fresh download from DBnomics
-- Check internet connection (requires API access)
+**A specific country fails to converge.**
+Country-level errors are logged but do not abort the run. Check the cell
+output for the country name. The pre-COVID toggle often resolves
+identification problems for Japan, Korea, Türkiye, and the United Kingdom
+(this is documented in Section 5.3 of the paper).
 
-**Estimation failures:**
-- Check cell output for country-specific error messages
-- Some countries may fail due to insufficient data or convergence issues
-- Results are saved for successful estimations
+**Imports fail after editing files in `src/`.**
+The notebook uses `%load_ext autoreload` and `%autoreload 2`, so most
+changes are picked up automatically. If they are not, restart the Jupyter
+kernel.
 
-**Module not found:**
-- Ensure you're in the project root directory
-- Verify all files in `src/` are present
-- Run `pip install -r Requirements.txt` again
-
+**You want to rebuild the dataset from scratch.**
+Delete `data/df_panel_max.csv` and rerun the notebook. The next run will
+hit DBnomics and rebuild the file.
 
 ## References
 
 **Methodology:**
--   Teräsvirta, T. (1994). *Specification, estimation, and evaluation of smooth transition autoregressive models*. Journal of the American Statistical Association, 89(425), 208-218.
--   Granger, C. W., & Teräsvirta, T. (1993). *Modelling non-linear economic relationships*. Oxford University Press.
-- Teräsvirta, T., Tjøstheim, D., and Granger, C. (2010). *Modelling nonlinear economic time series*. Oxford University Press.
 
-**Economic Theory (BUIP):**
-- Proaño, C. R. (2013). *Monetary policy rules and macroeconomic stabilization in small open economies under behavioral fx trading: Insights from numerical simulations*. The Manchester School, 81(6):992–1011.
+- Granger, C. W. J., and Teräsvirta, T. (1993). *Modelling Non-Linear
+  Economic Relationships*. Oxford University Press.
+- Teräsvirta, T. (1994). Specification, estimation, and evaluation of
+  smooth transition autoregressive models. *Journal of the American
+  Statistical Association*, 89(425), 208 to 218.
+- Teräsvirta, T., Tjøstheim, D., and Granger, C. W. J. (2010). *Modelling
+  Nonlinear Economic Time Series*. Oxford University Press.
+
+**Behavioral UIP:**
+
+- Proaño, C. R. (2013). Monetary policy rules and macroeconomic
+  stabilization in small open economies under behavioral FX trading:
+  insights from numerical simulations. *The Manchester School*, 81(6),
+  992 to 1011.
 
 ## License
 
-See LICENSE file for details.
+See `LICENSE`.
